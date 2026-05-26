@@ -13,7 +13,7 @@ import {
   downloadTelegramFile,
 } from "@/lib/telegram";
 import { clearPending, getPending, setPending } from "@/lib/telegram-pending";
-import { currentIstDate, currentIstTime } from "@/lib/time";
+import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 
 /** Extend invocation until `after()` tasks finish (LLM + Telegram API). */
 export const maxDuration = 60;
@@ -77,6 +77,7 @@ async function processMessage(
   text: string,
   today: string,
   now: string,
+  weekday: string,
   base64Image?: string
 ) {
   try {
@@ -100,7 +101,7 @@ async function processMessage(
       }
 
       if (isDirectSlashCommand(text)) {
-        const action = await parseNaturalLanguage(text, `${today} ${now}`);
+        const action = await parseNaturalLanguage(text, `${today} ${now} (${weekday})`);
         const message = await applyParsedAction(action, today);
         await clearPending(chatId);
         await sendTelegramMessage(chatId, `✓ ${message}`);
@@ -122,7 +123,7 @@ async function processMessage(
     const parseInputString = pendingAction ? text : history.join("\n");
     const action = await parseNaturalLanguage(
       parseInputString,
-      `${today} ${now}`,
+      `${today} ${now} (${weekday})`,
       pendingAction,
       base64Image
     );
@@ -140,7 +141,8 @@ async function processMessage(
       return;
     }
 
-    await setPending(chatId, action, today);
+    const targetDate = (action.data?.date as string) || today;
+    await setPending(chatId, action, targetDate);
     await sendTelegramMessageWithButtons(chatId, formatActionPreview(action));
   } catch (e) {
     await sendTelegramMessage(chatId, `Error: ${String(e)}`);
@@ -210,7 +212,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await processMessage(chatId, textToParse, today, now, base64Image);
+    const weekday = currentIstWeekday();
+    await processMessage(chatId, textToParse, today, now, weekday, base64Image);
   });
 
   return NextResponse.json({ ok: true });

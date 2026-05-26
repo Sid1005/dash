@@ -42,3 +42,14 @@ next-env.d.ts
 
 # past conversations logs
 /past_conversations/
+
+# documentation and explanation files
+/*.html
+/public/*.html
+/*.txt
+/PLAN.md
+/CLAUDE.md
+
+# agent configuration and skills
+/.agents/
+/skills-lock.json

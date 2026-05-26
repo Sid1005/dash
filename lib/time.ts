@@ -26,3 +26,10 @@ export function currentIstTime(date = new Date()) {
   const parts = istParts(date);
   return `${parts.hour}:${parts.minute}`;
 }
+
+export function currentIstWeekday(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: IST_TIME_ZONE,
+    weekday: "long",
+  }).format(date);
+}

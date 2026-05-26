@@ -98,7 +98,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           estimated: { type: "boolean", description: "Set to true if macros are estimated from dish name only, false if exact values provided." },
           cost: { type: "number", description: "Cost of the food if specified." },
           time: { type: "string", description: "Time when food was eaten in 24-hour HH:MM format." },
-          meal: { type: "string", description: "breakfast, lunch, dinner, snack, etc." }
+          meal: { type: "string", description: "breakfast, lunch, dinner, snack, etc." },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["name", "calories", "protein_g", "estimated"]
       }
@@ -115,7 +116,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           item: { type: "string", description: "Description of what was purchased." },
           amount: { type: "number", description: "Amount spent." },
           category: { type: "string", enum: ["Food", "Transport", "Health", "Entertainment", "Shopping", "Other"], description: "Category of the spend (Food, Transport, Health, Entertainment, Shopping, Other)." },
-          time: { type: "string", description: "Time when spent in 24-hour HH:MM format." }
+          time: { type: "string", description: "Time when spent in 24-hour HH:MM format." },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["item", "amount", "category"]
       }
@@ -141,7 +143,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
               },
               required: ["item", "amount", "category"]
             }
-          }
+          },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["expenses"]
       }
@@ -176,7 +179,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
               time: { type: "string", description: "Time in 24-hour HH:MM format." }
             },
             required: ["item", "amount", "category"]
-          }
+          },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["food", "spending"]
       }
@@ -193,7 +197,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           start: { type: "string", description: "Start time in 24-hour HH:MM format." },
           end: { type: "string", description: "End time in 24-hour HH:MM format." },
           activity: { type: "string", description: "Description of the activity." },
-          category: { type: "string", enum: ["Deep Work", "Admin", "Meetings", "Personal", "Health", "Learning", "Other"], description: "Category of activity (Deep Work, Admin, Meetings, Personal, Health, Learning, Other)." }
+          category: { type: "string", enum: ["Deep Work", "Admin", "Meetings", "Personal", "Health", "Learning", "Other"], description: "Category of activity (Deep Work, Admin, Meetings, Personal, Health, Learning, Other)." },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["start", "end", "activity", "category"]
       }
@@ -219,7 +224,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
               },
               required: ["start", "end", "activity", "category"]
             }
-          }
+          },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["blocks"]
       }
@@ -250,7 +256,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          text: { type: "string", description: "What was learned." }
+          text: { type: "string", description: "What was learned." },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["text"]
       }
@@ -294,7 +301,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
         properties: {
           text: { type: "string", description: "Content of the note." },
           time: { type: "string", description: "Time in 24-hour HH:MM format if specified." },
-          kind: { type: "string", enum: ["note", "activity", "agent_event"], description: "Default is 'note'. Use 'activity' for completed actions without duration (e.g., '10 pushups done', 'meditated 10 mins')." }
+          kind: { type: "string", enum: ["note", "activity", "agent_event"], description: "Default is 'note'. Use 'activity' for completed actions without duration (e.g., '10 pushups done', 'meditated 10 mins')." },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
         required: ["text"]
       }

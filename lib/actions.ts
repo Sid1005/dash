@@ -34,15 +34,32 @@ function extractText(data: Record<string, unknown> | null | undefined): string {
   return (data.text ?? data.description ?? data.content ?? data.message ?? "") as string;
 }
 
+function formatDateLabel(dateStr?: string): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(d.getTime())) return ` on ${dateStr}`;
+    const formatted = d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    return ` on *${formatted}*`;
+  } catch {
+    return ` on ${dateStr}`;
+  }
+}
+
 export async function applyParsedAction(
   action: ParsedAction,
   date: string
 ): Promise<string> {
   const { type, data = {} } = action;
+  const targetDate = (data.date as string) || date;
 
   if (type === "food") {
     const entry = data as unknown as FoodEntry;
-    await insertFoodEntry(date, entry);
+    await insertFoodEntry(targetDate, entry);
     const est = entry.estimated ? " (estimated)" : "";
     return `Logged ${entry.name}: ${entry.calories} cal, ${entry.protein_g}g protein${est}`;
   }
@@ -52,7 +69,7 @@ export async function applyParsedAction(
       ...(data as unknown as SpendEntry),
       category: normalizeSpendCategory((data.category as string) ?? "Other"),
     };
-    await insertSpending(date, entry);
+    await insertSpending(targetDate, entry);
     return `Logged ₹${entry.amount} for ${entry.item}`;
   }
 
@@ -60,7 +77,7 @@ export async function applyParsedAction(
     const expenses = (data.expenses ?? []) as Array<{ item: string; amount: number; category?: string; time?: string }>;
     const saved = await Promise.all(
       expenses.map((e) =>
-        insertSpending(date, {
+        insertSpending(targetDate, {
           item: e.item,
           amount: e.amount,
           category: normalizeSpendCategory(e.category ?? "Other"),
@@ -77,21 +94,21 @@ export async function applyParsedAction(
       ...(data.spending as unknown as SpendEntry),
       category: normalizeSpendCategory(((data.spending as Record<string, unknown>)?.category as string) ?? "Food"),
     };
-    await insertFoodEntry(date, f);
-    await insertSpending(date, s);
+    await insertFoodEntry(targetDate, f);
+    await insertSpending(targetDate, s);
     const est = f.estimated ? " (estimated)" : "";
     return `Logged ${f.name}: ${f.calories} cal, ${f.protein_g}g protein${est} · ₹${s.amount}`;
   }
 
   if (type === "time_block") {
     const block = data as unknown as TimeBlock;
-    const saved = await insertTimeBlock(date, block);
+    const saved = await insertTimeBlock(targetDate, block);
     return `Logged ${saved.start}–${saved.end}: ${saved.activity}`;
   }
 
   if (type === "time_blocks") {
     const blocks = (data.blocks ?? []) as Array<{ start: string; end: string; activity: string; category?: string }>;
-    const saved = await Promise.all(blocks.map((b) => insertTimeBlock(date, b)));
+    const saved = await Promise.all(blocks.map((b) => insertTimeBlock(targetDate, b)));
     return saved.map((s) => `${s.start}–${s.end}: ${s.activity}`).join(" · ");
   }
 
@@ -111,10 +128,10 @@ export async function applyParsedAction(
       dueDate = new Date();
       dueDate.setMinutes(dueDate.getMinutes() + Math.round(dueInMinutes));
     } else {
-      let targetDateStr = date;
+      let targetDateStr = targetDate;
       
       if (rawDue === "tomorrow") {
-        const d = new Date(`${date}T00:00:00+05:30`);
+        const d = new Date(`${targetDate}T00:00:00+05:30`);
         d.setDate(d.getDate() + 1);
         targetDateStr = currentIstDate(d);
       } else if (rawDue !== "today" && /^\d{4}-\d{2}-\d{2}$/.test(rawDue)) {
@@ -125,7 +142,7 @@ export async function applyParsedAction(
       
       dueDate = new Date(`${targetDateStr}T${targetTimeStr}:00+05:30`);
       if (isNaN(dueDate.getTime())) {
-        dueDate = new Date(`${date}T23:59:00+05:30`);
+        dueDate = new Date(`${targetDate}T23:59:00+05:30`);
       }
     }
 
@@ -144,7 +161,7 @@ export async function applyParsedAction(
 
   if (type === "learning") {
     const text = extractText(data);
-    await insertLearning(date, text);
+    await insertLearning(targetDate, text);
     return `Learning logged: "${text.slice(0, 60)}"`;
   }
 
@@ -163,7 +180,7 @@ export async function applyParsedAction(
   if (type === "workout") {
     type ExerciseSet = { reps: number; weight_kg: number };
     type Exercise = { name: string; sets: ExerciseSet[]; notes?: string };
-    const workoutDate = (data.date as string) || date;
+    const workoutDate = (data.date as string) || targetDate;
     const exercises = (data.exercises as Exercise[]) ?? [];
     const supabase = createAdminClient();
 
@@ -204,7 +221,7 @@ export async function applyParsedAction(
     ? (data.kind as "note" | "activity" | "agent_event")
     : "note";
 
-  await insertActivity(date, {
+  await insertActivity(targetDate, {
     actor: "telegram",
     kind,
     verb: "noted",
@@ -240,36 +257,42 @@ export function formatActionPreview(action: ParsedAction): string {
   if (type === "food") {
     const entry = data as unknown as FoodEntry;
     const est = entry.estimated ? " (estimated)" : "";
-    return `I found *${entry.name}* -> *${entry.calories} cal*, *${entry.protein_g}g protein*${est}.\nNote it down? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I found *${entry.name}*${dateLabel} -> *${entry.calories} cal*, *${entry.protein_g}g protein*${est}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "food_and_spending") {
     const f = data.food as unknown as FoodEntry;
     const s = data.spending as unknown as SpendEntry;
     const est = f.estimated ? " (estimated)" : "";
-    return `I found *${f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *₹${s.amount}* spend.\nNote it down? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel((data.date as string) || (data.spending as any)?.date || (data.food as any)?.date);
+    return `I found *${f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *₹${s.amount}* spend${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "spending") {
     const entry = data as unknown as SpendEntry;
-    return `I parsed a spend: *₹${entry.amount}* for *${entry.item}*.\nNote it down? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I parsed a spend${dateLabel}: *₹${entry.amount}* for *${entry.item}*.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "multiple_spending") {
     const expenses = (data.expenses ?? []) as Array<{ item: string; amount: number; category?: string }>;
     const lines = expenses.map((e) => `*₹${e.amount}* for *${e.item}*`).join("\n");
-    return `I found ${expenses.length} expenses:\n${lines}\nSave them? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I found ${expenses.length} expenses${dateLabel}:\n${lines}\nSave them? Reply *yes* or *no*.`;
   }
 
   if (type === "time_block") {
     const block = data as unknown as TimeBlock;
-    return `I parsed a time block: *${block.start}-${block.end}* for *${block.activity}*.\nNote it down? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I parsed a time block${dateLabel}: *${block.start}-${block.end}* for *${block.activity}*.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "time_blocks") {
     const blocks = (data.blocks ?? []) as Array<{ start: string; end: string; activity: string }>;
     const lines = blocks.map((b) => `*${b.start}–${b.end}* ${b.activity}`).join("\n");
-    return `I found ${blocks.length} time blocks:\n${lines}\nSave them? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I found ${blocks.length} time blocks${dateLabel}:\n${lines}\nSave them? Reply *yes* or *no*.`;
   }
 
   if (type === "task") {
@@ -288,7 +311,8 @@ export function formatActionPreview(action: ParsedAction): string {
   }
 
   if (type === "learning") {
-    return `I parsed a learning note.\nNote it down? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I parsed a learning note${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "goal") {
@@ -300,12 +324,14 @@ export function formatActionPreview(action: ParsedAction): string {
   }
 
   if (type === "workout") {
-    return `I parsed a workout.\nNote it down? Reply *yes* or *no*.`;
+    const dateLabel = formatDateLabel(data.date as string);
+    return `I parsed a workout${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "chat") {
     return data.response as string;
   }
 
-  return `I parsed this as a note.\nNote it down? Reply *yes* or *no*.`;
+  const dateLabel = formatDateLabel(data.date as string);
+  return `I parsed this as a note${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
 }
