@@ -48,6 +48,21 @@ A workout tracker for logging exercise routines. Track exercises, weights, reps,
 
 ## Integrations
 
+### Hermes Cron Reminders
+
+A [Hermes Agent](https://hermes-agent.nousresearch.com/docs) cron job polls the Dash API every minute for tasks due within 60 seconds and delivers reminders to Telegram.
+
+- **Script**: `cron/dash_queue_processor.py` — fetches `GET /api/tasks`, filters non-done tasks with `due_at` within the next 60s, prints `⏰ Task Title — due now!` to stdout
+- **Cron mode**: `no_agent` (deterministic, no LLM involved) — stdout is delivered verbatim to Telegram
+- **Schedule**: every 1 minute
+
+Setup:
+```bash
+cp cron/dash_queue_processor.py ~/.hermes/scripts/
+hermes cron create --name dash-reminder --schedule "every 1m" \
+  --script dash_queue_processor.py --no-agent --deliver telegram
+```
+
 ### Telegram Bot
 
 Integrates a Telegram bot endpoint. Parse natural language messages using an LLM. Create database entries for spending, workouts, food, and calendar items directly through chat messages.
