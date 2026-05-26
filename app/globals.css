@@ -1,26 +1,108 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+  --font-heading: var(--sans);
+  --color-ring: var(--blue);
+  --color-input: var(--line);
+  --color-border: var(--line);
+  --color-destructive: var(--rose);
+  --color-accent-foreground: var(--blue);
+  --color-accent: var(--blue-deep);
+  --color-muted-foreground: var(--muted);
+  --color-muted: var(--bg-2);
+  --color-secondary-foreground: var(--text);
+  --color-secondary: var(--card-2);
+  --color-primary-foreground: var(--bg);
+  --color-primary: var(--blue);
+  --color-popover-foreground: var(--text);
+  --color-popover: var(--bg);
+  --color-card-foreground: var(--text);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --bg: #fffaf0;
+  --bg-2: #f6ecda;
+  --card: #fffaf0;
+  --card-2: #efe3ce;
+  --line: #dfd0b8;
+  --line-strong: #cdbb9f;
+  --text: #171411;
+  --muted: #766c5b;
+  --dim: #b1a38d;
+  --blue: #2454d6;
+  --blue-soft: #2454d6;
+  --blue-deep: #d8e0f5;
+  --rose: #b24444;
+  --mono: var(--font-label), ui-monospace, monospace;
+  --sans: var(--font-serif), ui-serif, Georgia, serif;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    font-size: 15px;
+    line-height: 1.45;
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-optical-sizing: auto;
+    font-weight: 300;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 300;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.mono {
+  font-family: var(--mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.uc {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+a {
+  color: inherit;
 }

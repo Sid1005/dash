@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard OS — System & Code Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09090b;
+      --card-bg: rgba(18, 18, 22, 0.85);
+      --card-hover: rgba(25, 25, 30, 0.95);
+      --border: rgba(63, 63, 70, 0.35);
+      --border-glow: rgba(139, 92, 246, 0.25);
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --primary: #a78bfa;
+      --primary-glow: rgba(167, 139, 250, 0.15);
+      --success: #34d399;
+      --success-glow: rgba(52, 211, 153, 0.15);
+      --warning: #fbbf24;
+      --info: #60a5fa;
+      --font-sans: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      padding: 3rem 1.5rem;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 0% 0%, rgba(167, 139, 250, 0.07) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(52, 211, 153, 0.05) 0%, transparent 50%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 4rem;
+      position: relative;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.4rem 1.2rem;
+      background: linear-gradient(135deg, var(--primary-glow), rgba(52, 211, 153, 0.08));
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 1.2rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 3.2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #ffffff 40%, #d4d4d8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 700px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* Grid Layouts */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+      margin-bottom: 3.5rem;
+    }
+
+    @media (min-width: 768px) {
+      .grid-2 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .grid-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .grid-full {
+        grid-column: span 2;
+      }
+    }
+
+    /* Card Styling */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2.2rem;
+      backdrop-filter: blur(16px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: var(--primary);
+      background: var(--card-hover);
+      box-shadow: 0 15px 35px -10px var(--primary-glow);
+      transform: translateY(-2px);
+    }
+
+    .card:hover::before {
+      opacity: 1;
+    }
+
+    .card-title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      color: #fff;
+    }
+
+    .card-title svg {
+      width: 24px;
+      height: 24px;
+      color: var(--primary);
+    }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      font-size: 0.98rem;
+      line-height: 1.6;
+    }
+
+    /* Navigation Links */
+    .file-link {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--primary);
+      text-decoration: none;
+      background: var(--primary-glow);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid rgba(167, 139, 250, 0.3);
+      transition: all 0.2s ease;
+      display: inline-block;
+      margin-bottom: 0.5rem;
+    }
+
+    .file-link:hover {
+      background: var(--primary);
+      color: var(--bg);
+      border-color: var(--primary);
+    }
+
+    ul, ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    li {
+      margin-bottom: 0.6rem;
+    }
+
+    /* Diagram Styles */
+    .architecture-diagram {
+      background: rgba(9, 9, 11, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      margin: 1.5rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .node-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .diagram-node {
+      background: rgba(24, 24, 27, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.8rem 1.2rem;
+      text-align: center;
+      min-width: 140px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      position: relative;
+    }
+
+    .diagram-node.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 12px var(--primary-glow);
+    }
+
+    .diagram-node.db {
+      border-color: var(--success);
+    }
+
+    .diagram-node.ai {
+      border-color: #c084fc;
+    }
+
+    .node-title {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: #fff;
+    }
+
+    .node-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .diagram-arrow {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Interactive Telegram Bot Simulator */
+    .simulator-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      margin-top: 1.5rem;
+    }
+
+    @media (min-width: 900px) {
+      .simulator-container {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .phone-mockup {
+      background: #18181b;
+      border: 6px solid #27272a;
+      border-radius: 36px;
+      height: 480px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .phone-header {
+      background: #27272a;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-align: center;
+      color: #fafafa;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .chat-area {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: #0f0f13;
+    }
+
+    .chat-bubble {
+      max-width: 80%;
+      padding: 0.6rem 0.9rem;
+      border-radius: 14px;
+      font-size: 0.85rem;
+      position: relative;
+      animation: bubble-fade 0.3s ease-out forwards;
+    }
+
+    .chat-bubble.user {
+      background: #2b5278;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-bubble.bot {
+      background: #202029;
+      color: #e2e2e8;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .chat-bubble.bot-preview {
+      align-self: flex-start;
+      background: #1a1a24;
+      border: 1px solid var(--border-glow);
+      border-bottom-left-radius: 4px;
+    }
+
+    .simulator-btn-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 0.5rem;
+    }
+
+    .sim-btn {
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .sim-btn.yes {
+      background: #14532d;
+      color: #86efac;
+    }
+
+    .sim-btn.no {
+      background: #450a0a;
+      color: #f87171;
+    }
+
+    .phone-footer {
+      background: #27272a;
+      padding: 0.75rem 1rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .sim-input {
+      flex: 1;
+      background: #09090b;
+      border: 1px solid #3f3f46;
+      border-radius: 20px;
+      padding: 0.4rem 1rem;
+      font-size: 0.8rem;
+      color: #fff;
+      outline: none;
+    }
+
+    .sim-send {
+      background: var(--primary);
+      color: var(--bg);
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .simulator-controls {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .step-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .step-card.active {
+      border-color: var(--primary);
+      background: rgba(167, 139, 250, 0.05);
+      box-shadow: 0 4px 20px -5px var(--primary-glow);
+    }
+
+    .step-card-num {
+      background: var(--border);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.75rem;
+      margin-right: 0.5rem;
+    }
+
+    .step-card.active .step-card-num {
+      background: var(--primary);
+      color: var(--bg);
+    }
+
+    .step-card-title {
+      font-weight: 700;
+      display: inline-block;
+      color: #fff;
+    }
+
+    .step-card-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      margin-bottom: 0;
+    }
+
+    /* Code Block Styling */
+    .code-title-bar {
+      background: #141416;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      padding: 0.5rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-box {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      background: #0c0c0e;
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 10px;
+      border-bottom-right-radius: 10px;
+      padding: 1.2rem;
+      overflow-x: auto;
+      color: #e2e8f0;
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+
+    .keyword { color: #f472b6; }
+    .type { color: #60a5fa; }
+    .string { color: #34d399; }
+    .comment { color: #71717a; }
+    .function { color: #fbbf24; }
+    .number { color: #fb7185; }
+
+    @keyframes bubble-fade {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 6rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">System Architecture</div>
+      <h1>Dashboard OS Architecture</h1>
+      <div class="subtitle">Complete guide to the Telegram webhook pipeline, OpenAI/Groq Tool calling, and natural language corrections</div>
+    </header>
+
+    <div class="grid grid-2">
+      <!-- High Level Components -->
+      <div class="card">
+        <div class="card-title">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+          </svg>
+          System Components
+        </div>
+        <p>The system is comprised of four primary components working in coordination over secure web interfaces:</p>
+        <ul>
+          <li>
+            <strong>Webhook Listener</strong>: 
+            <a class="file-link" href="file:///Users/siddharthceri/Documents/dash/app/api/telegram/webhook/route.ts">app/api/telegram/webhook/route.ts</a>
+            handles authentication and runs actions asynchronously.
+          </li>
+          <li>
+            <strong>Pending State Store</strong>: 
+            <a class="file-link" href="file:///Users/siddharthceri/Documents/dash/lib/telegram-pending.ts">lib/telegram-pending.ts</a>
+            holds intermediate JSON state in Supabase (or fallback file system) with a 15-minute TTL.
+          </li>
+          <li>
+            <strong>AI Parser</strong>: 
+            <a class="file-link" href="file:///Users/siddharthceri/Documents/dash/lib/parse.ts">lib/parse.ts</a>
+            connects to Groq using tool-calling to extract parameters into typed data.
+          </li>
+          <li>
+            <strong>Action Handler</strong>: 
+            <a class="file-link" href="file:///Users/siddharthceri/Documents/dash/lib/actions.ts">lib/actions.ts</a>
+            validates, normalizes, and saves completed entries to the database.
+          </li>
+        </ul>
+      </div>
+
+      <!-- State Machine & Flow -->
+      <div class="card">
+        <div class="card-title">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H17v4.113M13 11V3h8v8h-8zM3 21h8v-8H3v8zm10 0h8v-8h-8v8z"></path>
+          </svg>
+          State Machine Logic
+        </div>
+        <p>When the user sends a message, the system transitions between states based on matching conditions:</p>
+        
+        <div class="architecture-diagram">
+          <div class="node-row">
+            <div class="diagram-node active">
+              <div class="node-title">Empty State</div>
+              <div class="node-desc">No pending action</div>
+            </div>
+            <div class="diagram-arrow">➔</div>
+            <div class="diagram-node">
+              <div class="node-title">Pending Action</div>
+              <div class="node-desc">Awaiting user check</div>
+            </div>
+          </div>
+          <div class="node-row">
+            <div class="diagram-node db">
+              <div class="node-title">Saved</div>
+              <div class="node-desc">"yes" -> Supabase</div>
+            </div>
+            <div class="diagram-arrow">◀</div>
+            <div class="diagram-node active">
+              <div class="node-title">Correction</div>
+              <div class="node-desc">Contextual update</div>
+            </div>
+            <div class="diagram-arrow">◀</div>
+            <div class="diagram-node ai">
+              <div class="node-title">Chat Response</div>
+              <div class="node-desc">Keeps pending active</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Before vs Now Comparison -->
+      <div class="card grid-full">
+        <div class="card-title">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+          </svg>
+          Before vs. Now: How Correction Works
+        </div>
+        <p>Previously, any modification to a pending action was parsed completely from scratch, leading to state loss. Now, the system uses the pending action as a template for contextual refinement.</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+          <!-- Before Column -->
+          <div style="background: rgba(239, 68, 68, 0.02); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 12px; padding: 1.5rem;">
+            <div style="color: #ef4444; font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem;">
+              <span style="font-size: 1.2rem;">✗</span> BEFORE: No-Context Parsing
+            </div>
+            <div style="font-size: 0.9rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.75rem; line-height: 1.5;">
+              <div>
+                <strong>1. Initial Message</strong>: <code style="color: #fff; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">"sent 1000 to Priyanka"</code>
+                <br>➔ Webhook creates a pending spending action.
+              </div>
+              <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem;">
+                <strong>2. User Correction</strong>: <code style="color: #fff; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">"description should be sent money to sis"</code>
+                <br>➔ Webhook receives the correction but passes <strong>no pending action context</strong> to the parser.
+              </div>
+              <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem;">
+                <strong>3. Result</strong>: Parser evaluates the correction in isolation. Because of the phrase "should be", the LLM misinterprets the input as a <strong>todo task</strong>:
+                <pre style="background: #000; padding: 0.6rem; border-radius: 6px; margin-top: 0.5rem; font-family: var(--font-mono); font-size: 0.75rem; color: #f87171; border-left: 3px solid #ef4444; overflow-x: auto;">{
+  "type": "task",
+  "data": { "title": "sent money to sis" }
+}</pre>
+                <span style="color: #f87171; font-weight: 500; font-size: 0.8rem;">⚠️ The original ₹1000 spend log is overwritten and completely lost.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Now Column -->
+          <div style="background: rgba(52, 211, 153, 0.02); border: 1px solid rgba(52, 211, 153, 0.15); border-radius: 12px; padding: 1.5rem;">
+            <div style="color: var(--success); font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem;">
+              <span style="font-size: 1.2rem;">✓</span> NOW: Context-Aware Updates
+            </div>
+            <div style="font-size: 0.9rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.75rem; line-height: 1.5;">
+              <div>
+                <strong>1. Initial Message</strong>: <code style="color: #fff; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">"sent 1000 to Priyanka"</code>
+                <br>➔ Webhook creates a pending spending action.
+              </div>
+              <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem;">
+                <strong>2. User Correction</strong>: <code style="color: #fff; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">"description should be sent money to sis"</code>
+                <br>➔ Webhook detects the active spending action and passes it to the parser as the <code style="color: var(--primary);">pendingAction</code> parameter.
+              </div>
+              <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem;">
+                <strong>3. Result</strong>: The LLM uses the pending action as a template. It maps "description" to the <code style="color: #fff;">item</code> field and updates it while preserving all other fields (amount, category, etc.):
+                <pre style="background: #000; padding: 0.6rem; border-radius: 6px; margin-top: 0.5rem; font-family: var(--font-mono); font-size: 0.75rem; color: var(--success); border-left: 3px solid var(--success); overflow-x: auto;">{
+  "type": "spending",
+  "data": {
+    "item": "sent money to sis",
+    "amount": 1000,
+    "category": "Other"
+  }
+}</pre>
+                <span style="color: var(--success); font-weight: 500; font-size: 0.8rem;">✓ The pending action is updated in place, retaining the ₹1000 amount!</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The Correction Engine -->
+      <div class="card grid-full">
+        <div class="card-title">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+          </svg>
+          The Natural Language Correction Engine
+        </div>
+        <p>
+          Unlike a standard one-shot parser, our system stores the active pending action as a structured JSON object. 
+          When the user responds, if there is a pending action, the system loads it from the database/file system and passes it directly to the 
+          AI model as historical context. 
+        </p>
+
+        <div class="code-title-bar">
+          <span>lib/parse.ts (How context is injected)</span>
+          <span>TypeScript</span>
+        </div>
+        <pre class="code-box">
+<span class="keyword">if</span> (pendingAction) {
+  messages.<span class="function">push</span>({
+    role: <span class="string">"system"</span>,
+    content: <span class="string">`Active Pending Action (awaiting user confirmation):
+${JSON.stringify(pendingAction, null, 2)}
+
+The user's input might be a correction, refinement, or modification to the fields of this active pending action (e.g., changing the amount, description/item/title, category, time, etc.).
+If the user's input is correcting or adjusting the pending action, you MUST output an updated version of the action (call the appropriate tool with the updated fields, preserving any unchanged fields from the pending action).
+If the user's input is a completely new command, ignore the pending action and parse the input as a new action normally.`</span>
+  });
+}</pre>
+      </div>
+
+      <!-- Interactive Telegram Simulator -->
+      <div class="card grid-full">
+        <div class="card-title">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+          </svg>
+          Interactive Flow Simulator
+        </div>
+        <p>Click on the steps in the controller on the right to simulate the conversation, database state, and webhook process.</p>
+
+        <div class="simulator-container">
+          <!-- Mobile Screen Mockup -->
+          <div class="phone-mockup">
+            <div class="phone-header">Dashboard Bot</div>
+            <div class="chat-area" id="chat-area">
+              <div style="text-align: center; color: var(--text-muted); font-size: 0.7rem; margin-top: 1rem;">TODAY</div>
+              <!-- Bubbles will be injected here by JS -->
+            </div>
+            <div class="phone-footer">
+              <input type="text" class="sim-input" id="sim-input" placeholder="Message..." readonly>
+              <div class="sim-send">➔</div>
+            </div>
+          </div>
+
+          <!-- Steps Controller -->
+          <div class="simulator-controls">
+            <!-- Step 1 -->
+            <div class="step-card active" onclick="activateStep(1)" id="step-card-1">
+              <div class="step-card-num">1</div>
+              <div class="step-card-title">Initial Input</div>
+              <p class="step-card-desc">User sends "sent 1000 to Priyanka". Webhook accepts and invokes parser. No pending action exists, so the parser resolves it to a brand new <code>spending</code> action.</p>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="step-card" onclick="activateStep(2)" id="step-card-2">
+              <div class="step-card-num">2</div>
+              <div class="step-card-title">Correction Input</div>
+              <p class="step-card-desc">User sends "description should be sent money to sis". The webhook notices there is a pending action. It passes this action as context. The parser updates the <code>item</code> field to "sent money to sis", preserving the amount (1000) and category (Other).</p>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="step-card" onclick="activateStep(3)" id="step-card-3">
+              <div class="step-card-num">3</div>
+              <div class="step-card-title">Conversational Query</div>
+              <p class="step-card-desc">User asks "why category other?". The parser returns a <code>chat</code> response. The webhook replies to the user, but preserves the pending action in the database so it can still be saved or modified.</p>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="step-card" onclick="activateStep(4)" id="step-card-4">
+              <div class="step-card-num">4</div>
+              <div class="step-card-title">Save Confirmation</div>
+              <p class="step-card-desc">User taps "Yes, note it" or types "yes". The webhook retrieves the pending action, invokes <code>applyParsedAction()</code> to insert it into the <code>spending</code> table in Supabase, and clears the pending store.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Dashboard OS • System & Code Architecture Guide
+    </footer>
+  </div>
+
+  <script>
+    const stepsData = {
+      1: {
+        chat: [
+          { sender: 'user', text: 'sent 1000 to Priyanka' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>Transfer to Priyanka</strong>.<br>Note it down?', preview: true }
+        ],
+        input: 'description should be sent money to sis'
+      },
+      2: {
+        chat: [
+          { sender: 'user', text: 'sent 1000 to Priyanka' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>Transfer to Priyanka</strong>.<br>Note it down?', preview: true },
+          { sender: 'user', text: 'description should be sent money to sis' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>sent money to sis</strong>.<br>Note it down?', preview: true }
+        ],
+        input: 'why category other?'
+      },
+      3: {
+        chat: [
+          { sender: 'user', text: 'sent 1000 to Priyanka' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>Transfer to Priyanka</strong>.<br>Note it down?', preview: true },
+          { sender: 'user', text: 'description should be sent money to sis' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>sent money to sis</strong>.<br>Note it down?', preview: true },
+          { sender: 'user', text: 'why category other?' },
+          { sender: 'bot', text: 'I categorized it as Other because no explicit category (like Food, Transport) was mentioned. You can change it by typing e.g. "category Health".' }
+        ],
+        input: 'yes'
+      },
+      4: {
+        chat: [
+          { sender: 'user', text: 'sent 1000 to Priyanka' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>Transfer to Priyanka</strong>.<br>Note it down?', preview: true },
+          { sender: 'user', text: 'description should be sent money to sis' },
+          { sender: 'bot', text: 'I parsed a spend: <strong>₹1000</strong> for <strong>sent money to sis</strong>.<br>Note it down?', preview: true },
+          { sender: 'user', text: 'why category other?' },
+          { sender: 'bot', text: 'I categorized it as Other because no explicit category (like Food, Transport) was mentioned. You can change it by typing e.g. "category Health".' },
+          { sender: 'user', text: 'yes' },
+          { sender: 'bot', text: '✓ Logged ₹1000 for sent money to sis' }
+        ],
+        input: ''
+      }
+    };
+
+    function activateStep(stepNum) {
+      // Toggle active states on step cards
+      for (let i = 1; i <= 4; i++) {
+        const card = document.getElementById(`step-card-${i}`);
+        if (i === stepNum) {
+          card.classList.add('active');
+        } else {
+          card.classList.remove('active');
+        }
+      }
+
+      // Update simulator chat
+      const chatArea = document.getElementById('chat-area');
+      chatArea.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.7rem; margin-top: 1rem;">TODAY</div>';
+      
+      const step = stepsData[stepNum];
+      step.chat.forEach(msg => {
+        const bubble = document.createElement('div');
+        if (msg.preview) {
+          bubble.className = 'chat-bubble bot-preview';
+          bubble.innerHTML = `<div style="font-size:0.65rem; color:#888; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.05em;">Bot Parser Result</div>
+                              <div>${msg.text}</div>
+                              <div class="simulator-btn-row">
+                                <button class="sim-btn yes">Yes, note it</button>
+                                <button class="sim-btn no">No</button>
+                              </div>`;
+        } else {
+          bubble.className = `chat-bubble ${msg.sender}`;
+          bubble.innerHTML = msg.text;
+        }
+        chatArea.appendChild(bubble);
+      });
+
+      // Scroll phone mockup to bottom
+      chatArea.scrollTop = chatArea.scrollHeight;
+
+      // Update footer input placeholder
+      const input = document.getElementById('sim-input');
+      input.value = step.input;
+    }
+
+    // Initialize first step
+    activateStep(1);
+  </script>
+</body>
+</html>

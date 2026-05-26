@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Dashboard OS - Master System Documentation Portal linking all end-to-end technical explanation guides.">
+  <title>Dashboard OS: Master Documentation Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #06060c;
+      --surface-color: rgba(15, 15, 27, 0.7);
+      --surface-hover: rgba(26, 26, 46, 0.85);
+      --border-color: rgba(223, 208, 184, 0.18);
+      --border-hover: rgba(157, 78, 221, 0.5);
+      --text-color: #f6f5f3;
+      --text-muted: #9c9a96;
+      --primary: #9d4edd;
+      --primary-hover: #b5179e;
+      --primary-glow: rgba(157, 78, 221, 0.12);
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.12);
+      --font-sans: 'Outfit', sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      padding: 3rem 1.5rem;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 5% 10%, rgba(157, 78, 221, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 95% 85%, rgba(6, 182, 212, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 60%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 1rem;
+      background: linear-gradient(135deg, var(--primary-glow), rgba(59, 130, 246, 0.08));
+      border: 1px solid var(--border-color);
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #d8b4fe;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 3.2rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #ffffff 40%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 700px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* Interactive Pipeline Map */
+    .flow-map-container {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2.2rem;
+      backdrop-filter: blur(16px);
+      margin-bottom: 3.5rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-desc {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+    }
+
+    .pipeline-svg {
+      width: 100%;
+      height: auto;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 1.5rem;
+    }
+
+    .svg-node {
+      fill: #0c0c14;
+      stroke: var(--border-color);
+      stroke-width: 2;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .svg-node:hover {
+      stroke: var(--primary);
+      fill: rgba(157, 78, 221, 0.05);
+      filter: drop-shadow(0 0 8px var(--primary-glow));
+    }
+
+    .svg-node.active {
+      stroke: var(--accent-cyan);
+      fill: rgba(6, 182, 212, 0.05);
+    }
+
+    .svg-node-text-title {
+      font-weight: 700;
+      font-size: 12px;
+      fill: #fff;
+      cursor: pointer;
+      pointer-events: none;
+    }
+
+    .svg-node-text-desc {
+      font-size: 9.5px;
+      fill: var(--text-muted);
+      cursor: pointer;
+      pointer-events: none;
+    }
+
+    .svg-link-line {
+      stroke: var(--border-color);
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
+      transition: stroke 0.3s;
+    }
+
+    .svg-link-line.active {
+      stroke: var(--accent-cyan);
+    }
+
+    .svg-arrow-head {
+      fill: var(--border-color);
+    }
+    
+    .svg-arrow-head.active {
+      fill: var(--accent-cyan);
+    }
+
+    .flow-info-box {
+      margin-top: 1.5rem;
+      background: rgba(0, 0, 0, 0.4);
+      border-left: 4px solid var(--accent-cyan);
+      border-radius: 4px;
+      padding: 1.2rem;
+      transition: all 0.3s ease;
+    }
+
+    .flow-info-title {
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Guides Grid */
+    .guides-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+      margin-bottom: 4rem;
+    }
+
+    @media (min-width: 768px) {
+      .guides-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .span-full {
+        grid-column: span 2;
+      }
+    }
+
+    .guide-card {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2.2rem;
+      backdrop-filter: blur(16px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .guide-card:hover {
+      border-color: var(--primary);
+      background: var(--surface-hover);
+      box-shadow: 0 20px 40px -10px var(--primary-glow);
+      transform: translateY(-4px);
+    }
+
+    .guide-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.2rem;
+    }
+
+    .guide-icon-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      transition: all 0.3s;
+    }
+
+    .guide-card:hover .guide-icon-box {
+      background: var(--primary-glow);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .guide-icon-box svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .guide-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+
+    .guide-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+      flex-grow: 1;
+    }
+
+    .guide-meta {
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 1.2rem;
+      margin-top: auto;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .guide-meta-item strong {
+      color: #fff;
+    }
+
+    .guide-btn {
+      margin-top: 1.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.75rem 1.5rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .guide-card:hover .guide-btn {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: var(--bg-color);
+      box-shadow: 0 4px 15px var(--primary-glow);
+    }
+
+    .guide-btn svg {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.2s;
+    }
+
+    .guide-card:hover .guide-btn svg {
+      transform: translateX(4px);
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 5rem;
+      padding: 2.5rem 0;
+      border-top: 1px solid rgba(223, 208, 184, 0.1);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">Master Documentation Index</div>
+      <h1>Dashboard OS Guides</h1>
+      <div class="subtitle">A multi-document, interactive system map detailing the end-to-end webhook architecture, tool compilation, and database filters.</div>
+    </header>
+
+    <main>
+      <!-- Master Interactive Flow Map -->
+      <section class="flow-map-container">
+        <h2 class="section-title">
+          <svg style="width:22px;height:22px;color:var(--accent-cyan)" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+          </svg>
+          System Pipeline Interactive Directory
+        </h2>
+        <div class="section-desc">Click any node in the data pipeline to highlight where it flows and discover which guide details its inner workings.</div>
+
+        <svg class="pipeline-svg" viewBox="0 0 900 180">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 2 L 10 5 L 0 8 z" fill="#444" />
+            </marker>
+            <marker id="arrow-active" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 2 L 10 5 L 0 8 z" fill="#06b6d4" />
+            </marker>
+          </defs>
+
+          <!-- Node 1: Input -->
+          <g transform="translate(15, 45)" onclick="highlightNode(0)">
+            <rect id="node-0" class="svg-node active" width="135" height="90" rx="8" />
+            <text x="15" y="30" class="svg-node-text-title">1. UI & Telegram</text>
+            <text x="15" y="52" class="svg-node-text-desc">User sends input text</text>
+            <text x="15" y="72" class="svg-node-text-desc">e.g., "gym 5 to 6"</text>
+          </g>
+
+          <line x1="150" y1="90" x2="190" y2="90" class="svg-link-line active" id="line-0" marker-end="url(#arrow-active)" />
+
+          <!-- Node 2: Webhook API Router -->
+          <g transform="translate(195, 45)" onclick="highlightNode(1)">
+            <rect id="node-1" class="svg-node" width="145" height="90" rx="8" />
+            <text x="15" y="30" class="svg-node-text-title">2. Webhook Router</text>
+            <text x="15" y="52" class="svg-node-text-desc">Auth / Asynchronous</text>
+            <text x="15" y="72" class="svg-node-text-desc">Next.js Route Handlers</text>
+          </g>
+
+          <line x1="340" y1="90" x2="375" y2="90" class="svg-link-line" id="line-1" marker-end="url(#arrow)" />
+
+          <!-- Node 3: AI Parser -->
+          <g transform="translate(380, 45)" onclick="highlightNode(2)">
+            <rect id="node-2" class="svg-node" width="145" height="90" rx="8" />
+            <text x="15" y="30" class="svg-node-text-title">3. AI Compiler</text>
+            <text x="15" y="52" class="svg-node-text-desc">Groq Tool Calling</text>
+            <text x="15" y="72" class="svg-node-text-desc">Builds structured AST</text>
+          </g>
+
+          <line x1="525" y1="90" x2="560" y2="90" class="svg-link-line" id="line-2" marker-end="url(#arrow)" />
+
+          <!-- Node 4: Staging Buffer -->
+          <g transform="translate(565, 45)" onclick="highlightNode(3)">
+            <rect id="node-3" class="svg-node" width="150" height="90" rx="8" />
+            <text x="15" y="30" class="svg-node-text-title">4. Staging Area</text>
+            <text x="15" y="52" class="svg-node-text-desc">Draft commit buffer</text>
+            <text x="15" y="72" class="svg-node-text-desc">Pending store (TTL)</text>
+          </g>
+
+          <line x1="715" y1="90" x2="745" y2="90" class="svg-link-line" id="line-3" marker-end="url(#arrow)" />
+
+          <!-- Node 5: Supabase DB -->
+          <g transform="translate(750, 45)" onclick="highlightNode(4)">
+            <rect id="node-4" class="svg-node" width="135" height="90" rx="8" />
+            <text x="15" y="30" class="svg-node-text-title">5. Supabase DB</text>
+            <text x="15" y="52" class="svg-node-text-desc">Commit write persistence</text>
+            <text x="15" y="72" class="svg-node-text-desc">B-Tree indexed search</text>
+          </g>
+        </svg>
+
+        <div id="flow-explanation" class="flow-info-box">
+          <div class="flow-info-title">
+            <span style="color:var(--accent-cyan)">●</span> User Interface Layer (Entry Point)
+          </div>
+          <p style="margin: 0; color: var(--text-muted); font-size: 0.92rem;">
+            Whether you trigger the dashboard command bar on your laptop or message the bot via Telegram on your phone, inputs enter the pipeline as raw text. 
+            Detailed end-to-end trace guides: 
+            <a href="./telegram-flow.html" style="color:var(--primary); text-decoration:none; font-weight:600;">telegram-flow.html</a> and 
+            <a href="./dashboard-flow-tech-analogies.html" style="color:var(--primary); text-decoration:none; font-weight:600;">dashboard-flow-tech-analogies.html</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- Guides Card Grid -->
+      <section class="guides-grid">
+        
+        <!-- Guide 1: Technical Analogies -->
+        <article class="guide-card">
+          <div class="guide-header-row">
+            <div class="guide-icon-box">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+              </svg>
+            </div>
+          </div>
+          <h3 class="guide-title">Software Tech Analogies</h3>
+          <p class="guide-desc">
+            Decodes core processes using intuitive computer science metaphors: the LLM parser acts as a Compiler yielding a structured AST, the action handler is a Network Router redirecting payloads, and pending Telegram updates stage and amend data like a Git staging area.
+          </p>
+          <div class="guide-meta">
+            <div class="guide-meta-item"><strong>File Path</strong>: ./dashboard-flow-tech-analogies.html</div>
+            <div class="guide-meta-item"><strong>Analogy Focus</strong>: Compiler, Network Switch, Git Staging</div>
+            <div class="guide-meta-item"><strong>Interactive Widget</strong>: Chat & Git terminal bash simulator</div>
+          </div>
+          <a href="./dashboard-flow-tech-analogies.html" class="guide-btn">
+            Open Tech-Analogies Guide
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"></path>
+            </svg>
+          </a>
+        </article>
+
+        <!-- Guide 2: Telegram Flow -->
+        <article class="guide-card">
+          <div class="guide-header-row">
+            <div class="guide-icon-box">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+              </svg>
+            </div>
+          </div>
+          <h3 class="guide-title">Telegram Flow Trace</h3>
+          <p class="guide-desc">
+            Traces the chronological progression of a specific natural language command—<i>"gym 5:15 to 6:15"</i>—from the Telegram Bot API payload to Next.js middleware, Groq completions, database staging, confirmation callback buttons, and permanent write.
+          </p>
+          <div class="guide-meta">
+            <div class="guide-meta-item"><strong>File Path</strong>: ./telegram-flow.html</div>
+            <div class="guide-meta-item"><strong>Trace Scope</strong>: Telegram ➔ Webhook ➔ DeepSeek ➔ DB</div>
+            <div class="guide-meta-item"><strong>Flow Diagrams</strong>: Sequential step-by-step layout</div>
+          </div>
+          <a href="./telegram-flow.html" class="guide-btn">
+            Open Webhook Trace Guide
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"></path>
+            </svg>
+          </a>
+        </article>
+
+        <!-- Guide 3: AI Parser V2 -->
+        <article class="guide-card">
+          <div class="guide-header-row">
+            <div class="guide-icon-box">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"></path>
+              </svg>
+            </div>
+          </div>
+          <h3 class="guide-title">AI Telegram Parser V2</h3>
+          <p class="guide-desc">
+            Details the architectural migration from custom prompts and double-stage pipeline routing to a unified, single-stage Groq Tool Calling schema using the high-capacity open-source 120B model, featuring JSON schema constraints and performance benchmarks.
+          </p>
+          <div class="guide-meta">
+            <div class="guide-meta-item"><strong>File Path</strong>: ./telegram-explanation.html</div>
+            <div class="guide-meta-item"><strong>API Mechanics</strong>: OpenAI SDK, Tool Call schemas</div>
+            <div class="guide-meta-item"><strong>Performance Metrics</strong>: Truncation bugs & cost reductions</div>
+          </div>
+          <a href="./telegram-explanation.html" class="guide-btn">
+            Open Parser V2 Guide
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"></path>
+            </svg>
+          </a>
+        </article>
+
+        <!-- Guide 4: Calendar Date Filtering -->
+        <article class="guide-card">
+          <div class="guide-header-row">
+            <div class="guide-icon-box">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z"></path>
+              </svg>
+            </div>
+          </div>
+          <h3 class="guide-title">Calendar & SQL Scans</h3>
+          <p class="guide-desc">
+            Dives into date-filtering systems from first principles. Explains how clicking a date updates the React state engine, fires Next.js API route fetches, maps to PostgREST queries, and triggers high-speed B-Tree index scans inside PostgreSQL.
+          </p>
+          <div class="guide-meta">
+            <div class="guide-meta-item"><strong>File Path</strong>: ./calendar-flow-explanation.html</div>
+            <div class="guide-meta-item"><strong>SQL Mechanics</strong>: B-Tree Index Scans, Explain plans</div>
+            <div class="guide-meta-item"><strong>Interactive Widget</strong>: Sandbox date selector & live console</div>
+          </div>
+          <a href="./calendar-flow-explanation.html" class="guide-btn">
+            Open Calendar Flow Guide
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"></path>
+            </svg>
+          </a>
+        </article>
+
+        <!-- Guide 5: Architecture Overview -->
+        <article class="guide-card span-full">
+          <div class="guide-header-row">
+            <div class="guide-icon-box" style="color:var(--success)">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 .621-.504 1.125-1.125 1.125H4.875A1.125 1.125 0 013.75 18.4V14.15m16.5 0c0-1.03-.804-1.89-1.83-1.934L17.25 12H6.75l-1.17.016a1.934 1.934 0 00-1.83 1.934m16.5 0h-16.5m16.5 0V9a1.125 1.125 0 00-1.125-1.125H4.875A1.125 1.125 0 003.75 9v5.15M12 15.75h.007v.008H12v-.008zm0-3h.007v.008H12v-.008zm0-3h.007v.008H12v-.008zm-3 6h.007v.008H9v-.008zm0-3h.007v.008H9v-.008zm0-3h.007v.008H9v-.008zm6 6h.007v.008h-.007v-.008zm0-3h.007v.008h-.007v-.008zm0-3h.007v.008h-.007v-.008z"></path>
+              </svg>
+            </div>
+          </div>
+          <h3 class="guide-title">General Code & System Architecture</h3>
+          <p class="guide-desc">
+            A comprehensive reference describing the primary files, webhook logic guards, routing tables, and the state machine logic that powers natural language corrections. It maps how correction updates amend details in-place without data loss, alongside an interactive chat/correction console simulator.
+          </p>
+          <div class="guide-meta">
+            <div class="guide-meta-item"><strong>File Path</strong>: ./architecture-explanation.html</div>
+            <div class="guide-meta-item"><strong>Core Logic</strong>: Webhook guards, State machine transitions</div>
+            <div class="guide-meta-item"><strong>Interactive Widget</strong>: Multi-step Telegram correction simulator</div>
+          </div>
+          <a href="./architecture-explanation.html" class="guide-btn">
+            Open Code Architecture Guide
+            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"></path>
+            </svg>
+          </a>
+        </article>
+
+      </section>
+    </main>
+
+    <footer>
+      Dashboard OS Technical Guides • Pair-programmed with Antigravity AI
+    </footer>
+  </div>
+
+  <script>
+    const nodeExplanations = [
+      {
+        title: "1. User Input (UI / Telegram Client)",
+        text: "Whether you use the web command bar or your Telegram client, inputs enter as raw text. For example, 'gym 5 to 6' or 'spent 200 on chicken rice'. Read the webhook trace in <strong>telegram-flow.html</strong> to see the entry schema."
+      },
+      {
+        title: "2. Webhook Router (API Gateway)",
+        text: "Next.js Route Handlers act as the API Gateway. The webhook endpoint (/api/telegram/webhook) runs secret auth validation and allowed-user guards, immediate 200 OK acknowledgements, and asynchronous after() executions."
+      },
+      {
+        title: "3. AI Parser (Natural Language Compiler)",
+        text: "Converts text to an Abstract Syntax Tree (AST) JSON payload. Uses Groq completions with 11 distinct JSON Schema tool definitions. Guesses food macros if missing. Detailed in <strong>telegram-explanation.html</strong>."
+      },
+      {
+        title: "4. Staging Area (Pending Store)",
+        text: "Holds the action payload in a temporary buffer (in the Supabase table telegram_pending) with a 15-minute TTL. Tapping correction inputs amends fields in the active buffer. Detailed in <strong>dashboard-flow-tech-analogies.html</strong>."
+      },
+      {
+        title: "5. Supabase Database (Persistent Store)",
+        text: " Tapping 'Yes, note it' commits the action payload into persistent DB tables like 'spending' or 'food_entries', and clears the buffer. Reads query these tables using high-speed B-Tree indexes. Detailed in <strong>calendar-flow-explanation.html</strong>."
+      }
+    ];
+
+    function highlightNode(nodeIdx) {
+      // Clear all active classes
+      for (let i = 0; i < 5; i++) {
+        document.getElementById(`node-${i}`).setAttribute("class", "svg-node");
+        const line = document.getElementById(`line-${i}`);
+        if (line) {
+          line.setAttribute("class", "svg-link-line");
+          line.setAttribute("marker-end", "url(#arrow)");
+        }
+      }
+
+      // Highlight target node
+      document.getElementById(`node-${nodeIdx}`).setAttribute("class", "svg-node active");
+
+      // Highlight active links up to the target node
+      for (let i = 0; i < nodeIdx; i++) {
+        const line = document.getElementById(`line-${i}`);
+        if (line) {
+          line.setAttribute("class", "svg-link-line active");
+          line.setAttribute("marker-end", "url(#arrow-active)");
+        }
+      }
+
+      // Update description box
+      const explanation = nodeExplanations[nodeIdx];
+      const infoBox = document.getElementById("flow-explanation");
+      infoBox.innerHTML = `
+        <div class="flow-info-title">
+          <span style="color:var(--accent-cyan)">●</span> ${explanation.title}
+        </div>
+        <p style="margin:0; color:var(--text-muted); font-size:0.92rem;">${explanation.text}</p>
+      `;
+    }
+  </script>
+</body>
+</html>

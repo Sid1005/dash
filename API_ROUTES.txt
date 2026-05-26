@@ -1,0 +1,288 @@
+DASH — API ROUTES REFERENCE
+============================
+Base URL (production): https://dash-five-blush.vercel.app
+All request/response bodies are JSON unless stated otherwise.
+All times are HH:MM (24h). All dates are YYYY-MM-DD.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. TASKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET /api/tasks
+  Returns all tasks ordered by due date (ascending).
+  Response: { tasks: TaskRow[] }
+
+  TaskRow shape:
+    id          string   (uuid)
+    title       string
+    due_at      string   (ISO 8601 datetime)
+    done        boolean
+    completed_at string | null
+
+POST /api/tasks
+  Create a new task.
+  Body: { title: string, due_at: string (ISO 8601) }
+  Response: { task: TaskRow }   (201 on success)
+
+PATCH /api/tasks/:id
+  Update a task (mark done, rename, or change due date).
+  Body (any combination):
+    done    boolean         — also sets/clears completed_at
+    title   string
+    due_at  string (ISO 8601)
+  Response: { task: TaskRow }
+
+DELETE /api/tasks/:id
+  Hard-delete a task by id.
+  Response: { ok: true }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. DAILY (food, spending, time blocks, activities)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET /api/daily?date=YYYY-MM-DD
+  Returns everything logged for a given day.
+  date defaults to current IST date if omitted.
+  Response:
+    {
+      date:        string,
+      food:        FoodEntry[],
+      spending:    SpendEntry[],
+      time_blocks: TimeBlockEntry[],
+      activities:  ActivityEntry[],
+      body:        string   (free-text markdown body of the day file)
+    }
+
+  FoodEntry:
+    id         string (uuid)
+    name       string
+    calories   number
+    protein_g  number
+    estimated  boolean
+    cost       number
+    time       string  (HH:MM)
+    meal       string  (e.g. "breakfast", "lunch", "dinner", "other")
+
+  SpendEntry:
+    item      string
+    amount    number
+    category  string  ("Food"|"Transport"|"Health"|"Entertainment"|"Shopping"|"Other")
+    time      string  (HH:MM)
+
+  TimeBlockEntry:
+    id        string (uuid)
+    date      string
+    start     string (HH:MM)
+    end       string (HH:MM)
+    activity  string
+    category  string  ("Deep Work"|"Admin"|"Meetings"|"Personal"|"Health"|"Learning"|"Other")
+
+  ActivityEntry: see section 3.
+
+POST /api/daily
+  Log a new entry for a given day.
+  Body: { date?: string, type: string, data: object }
+
+  type = "food"
+    data: { name, calories, protein_g, estimated, cost, time, meal }
+    Response: { ok: true, food: FoodEntry }
+
+  type = "spending"
+    data: { item, amount, category, time }
+    Response: { ok: true }
+
+  type = "time_block"
+    data: { start (HH:MM), end (HH:MM), activity, category? }
+    Response: { ok: true, time_block: TimeBlockEntry }
+
+  type = "activity"
+    data: { body, actor?, kind?, verb?, time?, metadata? }
+    Response: { ok: true, activity: ActivityEntry }
+
+DELETE /api/daily
+  Remove an existing entry.
+  Body: { date?: string, type: string, id?: string, index?: number }
+
+  type = "food"
+    Required: id (uuid of the food entry)
+    Response: { ok: true }
+
+  type = "time_block"
+    Required: id (uuid of the time block)
+    Response: { ok: true }
+
+  type = "spending"
+    Required: id (uuid of the spending entry)
+    Response: { ok: true }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. ACTIVITIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET /api/activities?date=YYYY-MM-DD
+  Returns all activities for the given date (defaults to today IST).
+  Response: { activities: ActivityEntry[] }
+
+  ActivityEntry:
+    id        string (uuid)
+    date      string (YYYY-MM-DD)
+    time      string (HH:MM)
+    actor     "telegram"|"agent"|"calendar"|"system"|"user"
+    kind      "note"|"activity"|"agent_event"
+    verb      string  (e.g. "noted", "logged", "synced")
+    body      string
+    metadata  object
+
+POST /api/activities
+  Insert a new activity.
+  Body: { body: string, date?: string, time?: string, actor?, kind?, verb?, metadata? }
+  Response: { ok: true, activity: ActivityEntry }
+
+DELETE /api/activities
+  Delete an activity by id.
+  Body: { id: string (uuid) }
+  Response: { ok: true }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. LEARNINGS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET /api/learnings?date=YYYY-MM-DD
+  Returns all learning entries for the given date.
+  Response: { date: string, items: { id: string, text: string }[] }
+  (items ordered by creation time)
+
+POST /api/learnings
+  Append a new learning for a date.
+  Body: { text: string, date?: string }
+  Response: { ok: true }
+
+DELETE /api/learnings
+  Remove a learning by id.
+  Body: { id: string (uuid) }
+  Response: { ok: true }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. CALENDAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET /api/calendar?date=YYYY-MM-DD
+  Returns Google Calendar events for the given date (via Composio).
+  date defaults to today if omitted.
+  Response: { date: string, events: CalendarEvent[] }
+
+  CalendarEvent:
+    id        string
+    title     string
+    start     string (ISO 8601 datetime)
+    end       string (ISO 8601 datetime)
+    location  string | undefined
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. LIFE'S WORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET /api/lifeswork/:section
+  Read a life's work section file.
+  :section is the filename slug (e.g. "vision", "goals").
+  Response: { section: string, content: string }
+
+PUT /api/lifeswork/:section
+  Overwrite the entire content of a section.
+  Body: { content: string }
+  Response: { ok: true }
+
+  Known sections: "vision", "goals"
+  (Any section name is accepted — maps to Life's Work/<Section>.md in the vault)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. PARSE (natural language → structured action)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+POST /api/parse
+  Parse a natural language string and immediately apply it (log it).
+  Body: { input: string, date?: string, now?: string (HH:MM) }
+  Response: { action: ParsedAction, message: string }
+
+  ParsedAction.type can be:
+    "food"             → logs a food entry
+    "spending"         → logs a spend entry
+    "food_and_spending"→ logs both food and spend
+    "time_block"       → logs a single time block
+    "time_blocks"      → logs multiple time blocks from one message
+    "task"             → creates a task (due_date or due_in_minutes)
+    "learning"         → appends a learning note
+    "goal"             → appends a line to Goals.md
+    "note"             → logs a general activity note (fallback)
+
+  ParsedAction.data shapes:
+    time_blocks: { blocks: [{ start: HH:MM, end: HH:MM, activity: string, category?: string }] }
+    task:        { title: string, due_date?: "today"|"tomorrow"|"YYYY-MM-DD", due_in_minutes?: number }
+    food:        { name, calories, protein_g, estimated, cost, time, meal }
+
+  Examples of inputs that parse correctly:
+    "chicken rice 550 cal 40g protein ₹150"                   → food_and_spending
+    "lunch 650 cal 35g"                                       → food
+    "spent ₹300 on grab"                                      → spending
+    "deep work 09:00-11:30"                                   → time_block
+    "6:15 to 7:15 gym, 7:30 to 10:15 dinner with friends"    → time_blocks
+    "add task: review PR due tomorrow"                        → task
+    "remind me to call mom in 30 minutes"                     → task (due_in_minutes: 30)
+    "learned that X implies Y"                                → learning
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. TELEGRAM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+POST /api/telegram/register
+  Register a Telegram webhook URL.
+  Body: { webhookUrl: string }
+  Response: Telegram Bot API result object
+
+POST /api/telegram/webhook
+  Telegram Bot API webhook receiver. Not intended for direct agent use.
+  Requires header: x-telegram-bot-api-secret-token (if TELEGRAM_WEBHOOK_SECRET is set)
+  Handles: text messages, /food slash command, inline button callbacks (yes/no confirmations)
+  Response: { ok: true }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUICK REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+METHOD  PATH                        PURPOSE
+------  --------------------------  ------------------------------------------
+GET     /api/tasks                  List all open + done tasks
+POST    /api/tasks                  Create task
+PATCH   /api/tasks/:id              Update task (done/title/due_at)
+DELETE  /api/tasks/:id              Delete task
+
+GET     /api/daily?date=            Full day snapshot (food+spend+blocks+activities)
+POST    /api/daily                  Log food / spending / time_block / activity
+DELETE  /api/daily                  Delete food (id) / time_block (id) / spending (index)
+
+GET     /api/activities?date=       List activities for a date
+POST    /api/activities             Insert activity
+DELETE  /api/activities             Delete activity by id
+
+GET     /api/learnings?date=        List learnings for a date
+POST    /api/learnings              Append learning
+DELETE  /api/learnings              Remove learning by index
+
+GET     /api/calendar?date=         Google Calendar events for a date
+
+GET     /api/lifeswork/:section     Read vision/goals/etc
+PUT     /api/lifeswork/:section     Overwrite vision/goals/etc
+
+POST    /api/parse                  Natural language → parse + apply (supports time_blocks)
+
+POST    /api/telegram/register      Set Telegram webhook
+POST    /api/telegram/webhook       Telegram webhook receiver
