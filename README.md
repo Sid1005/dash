@@ -52,7 +52,7 @@ A workout tracker for logging exercise routines. Track exercises, weights, reps,
 
 A [Hermes Agent](https://hermes-agent.nousresearch.com/docs) cron job polls the Dash API every minute for tasks due within 60 seconds and delivers reminders to Telegram.
 
-- **Script**: `cron/dash_queue_processor.py` — fetches `GET /api/tasks`, filters non-done tasks with `due_at` within the next 60s, prints `⏰ Task Title — due now!` to stdout
+- **Script**: `cron/dash_queue_processor.py` — fetches `GET /api/tasks`, filters non-done tasks with `due_at` within the next 60s, prints ` Task Title — due now!` to stdout
 - **Cron mode**: `no_agent` (deterministic, no LLM involved) — stdout is delivered verbatim to Telegram
 - **Schedule**: every 1 minute
 
