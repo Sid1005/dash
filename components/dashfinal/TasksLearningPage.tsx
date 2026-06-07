@@ -1,24 +1,33 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import {
   PageHeader,
   LoadingPage,
-  Eyebrow,
   useDashData,
   TaskRow,
   LearningRow,
   DashTask,
   DashLearning,
   localIsoDate,
-  BROWN_LINE,
+  dueLabel,
+  weightForTask,
+  DateNavigator,
 } from "./DashFinal";
 
 export function TasksLearningPage() {
   const [date, setDate] = useState(() => localIsoDate());
-  const data = useDashData(date);
-  const [viewDate, setViewDate] = useState(() => new Date(date));
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const data = useDashData(date, refreshTrigger, {
+    includeLearnings: true,
+    includeTasks: true,
+    includeCalendar: false,
+    includeProblems: false,
+    includeQuotes: false,
+  });
+  // Local tasks state for optimistic checklist updates
+  const [localTasks, setLocalTasks] = useState<DashTask[]>([]);
 
   // Task form state
   const [taskTitle, setTaskTitle] = useState("");
@@ -39,31 +48,61 @@ export function TasksLearningPage() {
   const [taskDueFocus, setTaskDueFocus] = useState(false);
   const [learnTextFocus, setLearnTextFocus] = useState(false);
   const [learnDateFocus, setLearnDateFocus] = useState(false);
-  const [showAllTasks, setShowAllTasks] = useState(false);
-  const [showAllArchive, setShowAllArchive] = useState(false);
-
-  // Sync calendar view when date changes
-  useEffect(() => {
-    setViewDate(new Date(date));
-  }, [date]);
 
   // Sync learning date state when active calendar date changes
   useEffect(() => {
     setLearningDate(date);
   }, [date]);
 
+  // Sync local tasks when backend data loads or updates
+  useEffect(() => {
+    if (data) {
+      const combined = [...data.TASKS, ...data.DONE_TASKS].sort(
+        (a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime()
+      );
+      setLocalTasks(combined);
+    }
+  }, [data]);
+
   const toggleTask = useCallback(async (task: DashTask) => {
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done: !task.done }),
-    });
-    window.location.reload();
+    // 1. Optimistic update
+    setLocalTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t))
+    );
+
+    // 2. Perform API fetch in the background without reloading
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: !task.done }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to update task");
+      }
+    } catch (e) {
+      console.error(e);
+      // Revert status on failure
+      setLocalTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, done: task.done } : t))
+      );
+    }
   }, []);
 
   const deleteTask = useCallback(async (task: DashTask) => {
-    await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
-    window.location.reload();
+    // 1. Optimistic update
+    setLocalTasks((prev) => prev.filter((t) => t.id !== task.id));
+
+    // 2. Perform API delete in the background
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error("Failed to delete task");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete task from server");
+    }
   }, []);
 
   const deleteLearning = useCallback(async (l: DashLearning) => {
@@ -72,8 +111,8 @@ export function TasksLearningPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: l.id }),
     });
-    window.location.reload();
-  }, []);
+    setRefreshTrigger((prev) => prev + 1);
+  }, [setRefreshTrigger]);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,9 +130,29 @@ export function TasksLearningPage() {
         const err = await res.json();
         throw new Error(err.error || "Failed to add task");
       }
+
+      const json = await res.json();
+
+      // Only add to localTasks if the task is due on the currently selected date
+      const taskDate = localIsoDate(new Date(dueAt));
+      if (taskDate === date) {
+        const newTask: DashTask = {
+          id: json.task.id,
+          title: json.task.title,
+          due: dueLabel(json.task.due_at),
+          weight: weightForTask(json.task.title),
+          context: "tasks",
+          done: json.task.done,
+          due_at: json.task.due_at,
+        };
+        setLocalTasks((prev) => {
+          const updated = [...prev, newTask];
+          return updated.sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime());
+        });
+      }
+
       setTaskTitle("");
       setTaskDueDate("");
-      window.location.reload();
     } catch (err: any) {
       setTaskError(err.message || "An error occurred");
     } finally {
@@ -117,7 +176,7 @@ export function TasksLearningPage() {
         throw new Error(err.error || "Failed to add learning");
       }
       setLearningText("");
-      window.location.reload();
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err: any) {
       setLearningError(err.message || "An error occurred");
     } finally {
@@ -125,85 +184,25 @@ export function TasksLearningPage() {
     }
   };
 
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-
-  // Generate calendar days for monthly grid
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month, 1);
-    const startDayOfWeek = firstDay.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-    const result: { isoStr: string; isCurrentMonth: boolean; dayNum: number }[] = [];
-
-    // Prepend previous month days
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1, daysInPrevMonth - i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: daysInPrevMonth - i,
-      });
-    }
-
-    // Add current month days
-    for (let i = 1; i <= daysInMonth; i++) {
-      const d = new Date(year, month, i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: true,
-        dayNum: i,
-      });
-    }
-
-    // Pad next month days to multiples of 7 (at least 35 or 42 cells)
-    const totalCells = Math.ceil(result.length / 7) * 7;
-    const padDays = totalCells - result.length;
-    for (let i = 1; i <= padDays; i++) {
-      const d = new Date(year, month + 1, i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: i,
-      });
-    }
-
-    // Keep grid height stable at exactly 6 rows (42 cells)
-    while (result.length < 42) {
-      const nextDayIdx = result.length - startDayOfWeek - daysInMonth + 1;
-      const d = new Date(year, month + 1, nextDayIdx);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: nextDayIdx,
-      });
-    }
-
-    return result;
-  }, [year, month]);
-
   if (!data) return <LoadingPage />;
 
   // Page styling aligned with warm light beige theme
   const pageStyle: React.CSSProperties = {
-    minHeight: "100vh",
+    height: "100vh",
     background: "var(--bg)",
     color: "var(--text)",
     display: "flex",
     flexDirection: "column",
     fontFamily: "var(--sans)",
+    overflow: "hidden",
   };
 
   const cardStyle: React.CSSProperties = {
-    background: "linear-gradient(180deg, rgba(205,187,159,0.12), transparent)",
-    border: "1px solid var(--line)",
-    borderRadius: "12px",
-    padding: "20px",
-    marginBottom: "28px",
+    padding: "16px 22px",
     display: "flex",
     flexDirection: "column",
-    gap: "14px",
+    gap: 10,
+    flexShrink: 0,
   };
 
   const labelStyle: React.CSSProperties = {
@@ -212,29 +211,30 @@ export function TasksLearningPage() {
     letterSpacing: "0.14em",
     fontWeight: 600,
     textTransform: "uppercase",
-    marginBottom: "4px",
+    marginBottom: 3,
     display: "block",
   };
 
   const inputStyle = (isFocused: boolean): React.CSSProperties => ({
-    background: "var(--bg)",
-    border: isFocused ? "1px solid var(--blue)" : "1px solid var(--line)",
-    borderRadius: "6px",
-    padding: "10px 14px",
+    background: "#ffffff",
+    border: isFocused ? "2px solid #0c0c0e" : "2px solid #000000",
+    borderRadius: 0,
+    padding: "8px 10px",
     color: "var(--text)",
     fontSize: "14px",
     width: "100%",
     outline: "none",
-    transition: "border-color 0.2s, box-shadow 0.2s",
-    boxShadow: isFocused ? "0 0 0 2px rgba(36, 84, 214, 0.15)" : "none",
+    transition: "box-shadow 0.2s",
+    boxShadow: isFocused ? "3px 3px 0 #000000" : "none",
+    fontFamily: "inherit",
   });
 
   const buttonStyle = (isHovered: boolean, isDisabled: boolean): React.CSSProperties => ({
-    background: isDisabled ? "var(--dim)" : "var(--blue)",
-    color: "#fffaf0",
+    background: isDisabled ? "#66666a" : "#0c0c0e",
+    color: "#faf9f6",
     border: "none",
-    borderRadius: "6px",
-    padding: "10px 18px",
+    borderRadius: 0,
+    padding: "8px 14px",
     fontSize: "11px",
     fontFamily: "var(--mono)",
     letterSpacing: "0.1em",
@@ -242,37 +242,71 @@ export function TasksLearningPage() {
     fontWeight: 600,
     cursor: isDisabled ? "not-allowed" : "pointer",
     alignSelf: "flex-end",
-    transition: "background-color 0.2s, opacity 0.2s, transform 0.1s",
+    transition: "opacity 0.2s, transform 0.1s",
     opacity: isHovered && !isDisabled ? 0.9 : 1,
-    transform: isHovered && !isDisabled ? "scale(1.02)" : "scale(1)",
+    transform: isHovered && !isDisabled ? "translate(-1px, -1px)" : "none",
   });
 
   return (
     <div style={pageStyle}>
       <PageHeader active="tasks" data={data} />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 340px",
-          flex: 1,
-        }}
-      >
-        {/* Left main area: Tasks & Learnings split columns */}
-        <div
-          style={{
-            padding: "34px 40px 48px",
-            borderRight: `1px solid ${BROWN_LINE}`,
-            display: "grid",
-            gridTemplateColumns: "1.2fr 1fr",
-            gap: "40px",
-          }}
-        >
+      <main style={{ padding: "32px 32px 40px", flex: 1, minHeight: 0, display: "flex", justifyContent: "center", overflow: "hidden" }}>
+        <div style={{ width: "100%", maxWidth: 1180, display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
+          {/* Header showing selected date & DateNavigator */}
+          <div className="grid-card" style={{ padding: "14px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexShrink: 0 }}>
+            <div className="zine-paperclip" />
+            <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+              <div className="zine-eyebrow blue" style={{ marginBottom: 0, flexShrink: 0 }}>
+                <span>↳ tasks & learning</span>
+                <span>01</span>
+              </div>
+              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "var(--text)", letterSpacing: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {format(new Date(`${date}T12:00:00`), "EEEE, MMMM d, yyyy")}
+              </h1>
+            </div>
+            <DateNavigator selectedDate={date} onChange={setDate} />
+          </div>
+
+          {/* Content area: Tasks & Learnings split columns */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
+              gap: 28,
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
           {/* Left Sub-Column: Tasks */}
-          <div>
-            {/* Add Task Form */}
-            <Eyebrow label="Add Task" color="var(--blue)" />
-            <form onSubmit={handleAddTask} style={cardStyle}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
+            <div className="grid-card" style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16, flex: 1, minHeight: 0 }}>
+              <div className="zine-paperclip" />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 14, flexShrink: 0 }}>
+                <div className="zine-eyebrow">
+                  <span>↳ tasks</span>
+                  <span>03</span>
+                </div>
+                <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>{localTasks.filter((t) => !t.done).length} open</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", minHeight: 0 }}>
+                {localTasks.map((t) => (
+                  <TaskRow key={t.id} t={t} onToggle={toggleTask} onDelete={deleteTask} />
+                ))}
+                {localTasks.length === 0 && (
+                  <div className="mono uc" style={{ fontSize: 10.5, color: "var(--dim)", padding: "16px 0", letterSpacing: "0.14em" }}>
+                    No tasks logged
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddTask} className="grid-card" style={cardStyle}>
+              <div className="zine-paperclip" />
+              <div className="zine-eyebrow blue">
+                <span>↳ add task</span>
+                <span>02</span>
+              </div>
               {taskError && (
                 <div style={{ color: "var(--rose)", fontSize: "12px", fontFamily: "var(--mono)" }}>
                   {taskError}
@@ -315,87 +349,37 @@ export function TasksLearningPage() {
                 {isSubmittingTask ? "Adding..." : "Add Task"}
               </button>
             </form>
-
-            <Eyebrow label="Tasks" right={`${data.TASKS.length} open`} />
-            <div style={{ display: "flex", flexDirection: "column", marginBottom: 40 }}>
-              {(showAllTasks ? data.TASKS : data.TASKS.slice(0, 5)).map((t) => (
-                <TaskRow key={t.id} t={t} onToggle={toggleTask} onDelete={deleteTask} />
-              ))}
-              {data.TASKS.length === 0 && (
-                <div className="mono uc" style={{ fontSize: 10.5, color: "var(--dim)", padding: "16px 0", letterSpacing: "0.14em" }}>
-                  No open tasks
-                </div>
-              )}
-              {data.TASKS.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllTasks(!showAllTasks)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--blue)",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                    fontFamily: "var(--mono)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    alignSelf: "flex-start",
-                    padding: "8px 0",
-                    marginTop: 4,
-                    textAlign: "left",
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                  onMouseOut={(e) => (e.currentTarget.style.textDecoration = "none")}
-                >
-                  {showAllTasks ? "Show less" : `See more (+${data.TASKS.length - 5} tasks)`}
-                </button>
-              )}
-            </div>
-
-            <div>
-              <Eyebrow label="Archive" right={`${data.DONE_TASKS.length} done`} color="var(--dim)" />
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {(showAllArchive ? data.DONE_TASKS : data.DONE_TASKS.slice(0, 5)).map((t) => (
-                  <TaskRow key={t.id} t={t} onToggle={toggleTask} onDelete={deleteTask} />
-                ))}
-                {data.DONE_TASKS.length === 0 && (
-                  <div className="mono uc" style={{ fontSize: 10.5, color: "var(--dim)", padding: "16px 0", letterSpacing: "0.14em" }}>
-                    No completed tasks
-                  </div>
-                )}
-                {data.DONE_TASKS.length > 5 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllArchive(!showAllArchive)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--dim)",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontFamily: "var(--mono)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      alignSelf: "flex-start",
-                      padding: "8px 0",
-                      marginTop: 4,
-                      textAlign: "left",
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                    onMouseOut={(e) => (e.currentTarget.style.textDecoration = "none")}
-                  >
-                    {showAllArchive ? "Show less" : `See more (+${data.DONE_TASKS.length - 5} tasks)`}
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Right Sub-Column: Learnings */}
-          <div style={{ paddingLeft: "20px", borderLeft: `1px solid ${BROWN_LINE}` }}>
-            {/* Add Learning Form */}
-            <Eyebrow label="Add Learning" color="var(--blue)" />
-            <form onSubmit={handleAddLearning} style={cardStyle}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
+            <div className="grid-card" style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16, flex: 1, minHeight: 0 }}>
+              <div className="zine-paperclip" />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 14, flexShrink: 0 }}>
+                <div className="zine-eyebrow">
+                  <span>↳ learnings</span>
+                  <span>05</span>
+                </div>
+                <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>last 5</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", minHeight: 0 }}>
+                {data.LEARNINGS.map((l, i) => (
+                  <LearningRow key={i} l={l} onDelete={deleteLearning} />
+                ))}
+                {data.LEARNINGS.length === 0 && (
+                  <div className="mono uc" style={{ fontSize: 10.5, color: "var(--dim)", padding: "16px 0", letterSpacing: "0.14em" }}>
+                    No learnings logged yet
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddLearning} className="grid-card" style={cardStyle}>
+              <div className="zine-paperclip" />
+              <div className="zine-eyebrow blue">
+                <span>↳ add learning</span>
+                <span>04</span>
+              </div>
               {learningError && (
                 <div style={{ color: "var(--rose)", fontSize: "12px", fontFamily: "var(--mono)" }}>
                   {learningError}
@@ -411,7 +395,7 @@ export function TasksLearningPage() {
                   onBlur={() => setLearnTextFocus(false)}
                   style={{
                     ...inputStyle(learnTextFocus),
-                    minHeight: "80px",
+                    minHeight: 56,
                     resize: "vertical",
                   }}
                   required
@@ -439,182 +423,11 @@ export function TasksLearningPage() {
                 {isSubmittingLearning ? "Saving..." : "Save Learning"}
               </button>
             </form>
-
-            <Eyebrow label="Learnings" right="last 5" />
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {data.LEARNINGS.map((l, i) => (
-                <LearningRow key={i} l={l} onDelete={deleteLearning} />
-              ))}
-              {data.LEARNINGS.length === 0 && (
-                <div className="mono uc" style={{ fontSize: 10.5, color: "var(--dim)", padding: "16px 0", letterSpacing: "0.14em" }}>
-                  No learnings logged yet
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Right main area: Month Picker Calendar */}
-        <div
-          style={{
-            padding: "32px 36px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 24,
-          }}
-        >
-          <div>
-            <Eyebrow label="Calendar Selection" color="var(--blue)" />
-
-            {/* Calendar Month Header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 18,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month - 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ‹
-              </button>
-
-              <div
-                className="mono uc"
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "var(--text)",
-                  letterSpacing: "0.14em",
-                }}
-              >
-                {format(viewDate, "MMMM yyyy")}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month + 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ›
-              </button>
-            </div>
-
-            {/* Weekday Names */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(7, 1fr)",
-                gap: 4,
-                textAlign: "center",
-                marginBottom: 8,
-              }}
-            >
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-                <div
-                  key={day}
-                  className="mono uc"
-                  style={{
-                    fontSize: 9.5,
-                    color: "var(--dim)",
-                    fontWeight: 500,
-                  }}
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Grid Days */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(7, 1fr)",
-                gap: 4,
-              }}
-            >
-              {calendarDays.map((day, idx) => {
-                const isSelected = day.isoStr === date;
-                const isCurrentToday = day.isoStr === localIsoDate();
-
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setDate(day.isoStr)}
-                    style={{
-                      aspectRatio: "1",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: isSelected ? "var(--blue)" : "transparent",
-                      color: isSelected
-                        ? "#fffaf0"
-                        : day.isCurrentMonth
-                        ? "var(--text)"
-                        : "var(--dim)",
-                      border:
-                        isCurrentToday && !isSelected
-                          ? "1px solid var(--blue)"
-                          : "none",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      fontFamily: "var(--mono)",
-                      fontWeight: isSelected ? "600" : "400",
-                      position: "relative",
-                      transition: "background 0.15s, color 0.15s",
-                    }}
-                    onMouseOver={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "var(--bg-2)";
-                    }}
-                    onMouseOut={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    {day.dayNum}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

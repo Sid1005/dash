@@ -113,3 +113,56 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  try {
+    const { id, exercises, date } = await req.json() as {
+      id: string;
+      exercises: { name: string; sets: { reps: number; weight_kg: number }[]; notes?: string }[];
+      date?: string;
+    };
+    if (!id) {
+      return NextResponse.json({ error: "Missing workout ID" }, { status: 400 });
+    }
+    const supabase = createAdminClient();
+
+    if (date) {
+      const { error: dateErr } = await supabase
+        .from("workouts")
+        .update({ occurred_date: date })
+        .eq("id", id);
+      if (dateErr) return NextResponse.json({ error: dateErr.message }, { status: 500 });
+    }
+
+    // 1. Delete all existing exercises for this workout session
+    const { error: delErr } = await supabase
+      .from("workout_exercises")
+      .delete()
+      .eq("workout_id", id);
+
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+
+    // 2. Prepare new rows
+    const setRows = exercises.flatMap((ex) =>
+      ex.sets.map((s, si) => ({
+        workout_id: id,
+        exercise_name: ex.name,
+        set_number: si + 1,
+        reps: s.reps,
+        weight_kg: s.weight_kg,
+        notes: ex.notes ?? "",
+      }))
+    );
+
+    // 3. Insert new rows
+    if (setRows.length > 0) {
+      const { error: insErr } = await supabase.from("workout_exercises").insert(setRows);
+      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
+
+

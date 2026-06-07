@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TaskRow } from "@/lib/tasks-types";
+import { rolloverOverdueTasks } from "@/lib/tasks-rollover";
 
 export async function GET() {
   try {
+    await rolloverOverdueTasks();
+
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("tasks")

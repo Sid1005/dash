@@ -316,8 +316,8 @@ async function runTests() {
   // ==========================================
   console.log('\nTesting WORKOUTS...');
   
-  // Create
-  const workoutData = {
+  // Create Workout 1
+  const workoutData1 = {
     date: testDate,
     exercises: [
       {
@@ -326,43 +326,143 @@ async function runTests() {
           { reps: 10, weight_kg: 80 },
           { reps: 8, weight_kg: 90 }
         ],
-        notes: 'Test notes'
+        notes: 'Test notes 1'
       }
     ]
   };
 
-  const createWorkoutReq = await request('POST', '/api/workouts', workoutData);
-  console.log('POST /api/workouts Status:', createWorkoutReq.status);
-  const workoutId = createWorkoutReq.body.workout_id;
-  if (!workoutId) {
-    throw new Error('Failed to create workout: ' + JSON.stringify(createWorkoutReq.body));
+  const createWorkoutReq1 = await request('POST', '/api/workouts', workoutData1);
+  console.log('POST /api/workouts (1) Status:', createWorkoutReq1.status);
+  const workoutId1 = createWorkoutReq1.body.workout_id;
+  if (!workoutId1) {
+    throw new Error('Failed to create workout 1: ' + JSON.stringify(createWorkoutReq1.body));
   }
-  console.log('Workout created with ID:', workoutId);
+  console.log('Workout 1 created with ID:', workoutId1);
 
-  // List & Verify
+  // Create Workout 2
+  const workoutData2 = {
+    date: testDate,
+    exercises: [
+      {
+        name: 'Automated Test Squats',
+        sets: [
+          { reps: 5, weight_kg: 100 }
+        ],
+        notes: 'Test notes 2'
+      },
+      {
+        name: 'Automated test Bench Press', // Same exercise name, different case to test combination
+        sets: [
+          { reps: 6, weight_kg: 95 }
+        ],
+        notes: 'Test notes 3'
+      }
+    ]
+  };
+
+  const createWorkoutReq2 = await request('POST', '/api/workouts', workoutData2);
+  console.log('POST /api/workouts (2) Status:', createWorkoutReq2.status);
+  const workoutId2 = createWorkoutReq2.body.workout_id;
+  if (!workoutId2) {
+    throw new Error('Failed to create workout 2: ' + JSON.stringify(createWorkoutReq2.body));
+  }
+  console.log('Workout 2 created with ID:', workoutId2);
+
+  // Edit Workout 1 (PUT)
+  console.log('- Testing Edit Workout (PUT)...');
+  const editData = {
+    id: workoutId1,
+    exercises: [
+      {
+        name: 'Automated Test Bench Press',
+        sets: [
+          { reps: 12, weight_kg: 85 }, // modified reps & weight
+          { reps: 10, weight_kg: 90 }, // modified reps
+          { reps: 8, weight_kg: 95 }   // added set
+        ],
+        notes: 'Updated test notes'
+      }
+    ]
+  };
+  const editReq = await request('PUT', '/api/workouts', editData);
+  console.log('PUT /api/workouts Status:', editReq.status);
+  if (!editReq.body.success) {
+    throw new Error('Failed to edit workout: ' + JSON.stringify(editReq.body));
+  }
+
+  // Verify Edit
   const listWorkoutReq = await request('GET', '/api/workouts');
-  console.log('GET /api/workouts Status:', listWorkoutReq.status);
-  const foundWorkout = listWorkoutReq.body.workouts.find(w => w.id === workoutId);
-  if (!foundWorkout) {
-    throw new Error('Created workout not found in list!');
+  const verifiedWorkout1 = listWorkoutReq.body.workouts.find(w => w.id === workoutId1);
+  if (!verifiedWorkout1) {
+    throw new Error('Workout 1 not found after edit!');
   }
-  console.log('Workout verified in list. Details:', JSON.stringify(foundWorkout, null, 2));
+  const benchPressGroup = verifiedWorkout1.workout_exercises.filter(ex => ex.exercise_name === 'Automated Test Bench Press');
+  if (benchPressGroup.length !== 3) {
+    throw new Error('Edit failed: expected 3 sets of Bench Press, got ' + benchPressGroup.length);
+  }
+  console.log('Workout edit verified successfully.');
 
-  // Delete
-  const delWorkoutReq = await request('DELETE', '/api/workouts', { id: workoutId });
+  // Combine Workout 1 and Workout 2 (POST /api/workouts/combine)
+  console.log('- Testing Combine Workouts...');
+  const combineReq = await request('POST', '/api/workouts/combine', { workoutIds: [workoutId1, workoutId2] });
+  console.log('POST /api/workouts/combine Status:', combineReq.status);
+  if (!combineReq.body.success) {
+    throw new Error('Failed to combine workouts: ' + JSON.stringify(combineReq.body));
+  }
+  const primaryId = combineReq.body.primary_workout_id;
+  console.log('Workouts combined into primary ID:', primaryId);
+
+  // Verify Combined Workout
+  const listWorkoutReq2 = await request('GET', '/api/workouts');
+  const combinedWorkout = listWorkoutReq2.body.workouts.find(w => w.id === primaryId);
+  const deletedWorkout = listWorkoutReq2.body.workouts.find(w => w.id === (primaryId === workoutId1 ? workoutId2 : workoutId1));
+
+  if (!combinedWorkout) {
+    throw new Error('Combined workout not found!');
+  }
+  if (deletedWorkout) {
+    throw new Error('The secondary workout was not deleted after combine!');
+  }
+
+  // Check merged exercises
+  const combinedBenchPress = combinedWorkout.workout_exercises.filter(
+    ex => ex.exercise_name.toLowerCase() === 'automated test bench press'
+  ).sort((a, b) => a.set_number - b.set_number);
+
+  const combinedSquats = combinedWorkout.workout_exercises.filter(
+    ex => ex.exercise_name.toLowerCase() === 'automated test squats'
+  );
+
+  if (combinedBenchPress.length !== 4) {
+    throw new Error('Combine failed: expected 4 sets of Bench Press, got ' + combinedBenchPress.length);
+  }
+  // Verify set_number sequencing is 1, 2, 3, 4
+  const setNums = combinedBenchPress.map(s => s.set_number);
+  if (JSON.stringify(setNums) !== '[1,2,3,4]') {
+    throw new Error('Combine failed: set numbers not sequenced correctly: ' + JSON.stringify(setNums));
+  }
+  if (combinedSquats.length !== 1) {
+    throw new Error('Combine failed: expected 1 set of Squats, got ' + combinedSquats.length);
+  }
+
+  console.log('Workout combine verified successfully (exercises merged and re-sequenced).');
+
+  // Delete Combined Workout (Clean up)
+  const delWorkoutReq = await request('DELETE', '/api/workouts', { id: primaryId });
   console.log('DELETE /api/workouts Status:', delWorkoutReq.status);
   if (!delWorkoutReq.body.success) {
-    throw new Error('Failed to delete workout: ' + JSON.stringify(delWorkoutReq.body));
+    throw new Error('Failed to delete combined workout: ' + JSON.stringify(delWorkoutReq.body));
   }
-  console.log('Workout deleted successfully.');
+  console.log('Combined workout deleted successfully.');
 
-  // Verify Deleted
-  const listWorkoutReq2 = await request('GET', '/api/workouts');
-  const foundWorkout2 = listWorkoutReq2.body.workouts.find(w => w.id === workoutId);
-  if (foundWorkout2) {
-    throw new Error('Workout still exists after delete!');
+  // Verify final cleanup
+  const listWorkoutReq3 = await request('GET', '/api/workouts');
+  const foundWorkoutFinal = listWorkoutReq3.body.workouts.find(w => w.id === primaryId);
+  if (foundWorkoutFinal) {
+    throw new Error('Combined workout still exists after delete!');
   }
-  console.log('Workout deletion verified.');
+  console.log('Workout final deletion and cleanup verified.');
+
 
 
   console.log('\n=============================================');

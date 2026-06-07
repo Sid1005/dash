@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { format, parseISO } from "date-fns";
-import { PageHeader, LoadingPage, Eyebrow, localIsoDate, BROWN_LINE } from "./DashFinal";
+import { PageHeader, LoadingPage, Eyebrow, localIsoDate, BROWN_LINE, DateNavigator } from "./DashFinal";
 
 type ExerciseSet = {
   id: string;
@@ -57,10 +57,125 @@ export default function WorkoutsPage() {
   const [repsInput, setRepsInput] = useState("10");
   const [weightInput, setWeightInput] = useState("60");
 
+  // Editing State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDate, setEditDate] = useState("");
+  const [editExercises, setEditExercises] = useState<{
+    name: string;
+    sets: { reps: number; weight_kg: number }[];
+  }[]>([]);
+
+  // Reset editing mode on change
+  useEffect(() => {
+    setIsEditing(false);
+  }, [selectedWorkoutId, date]);
+
+  const startEditing = () => {
+    if (!selectedWorkout) return;
+    const groups = groupExercises(selectedWorkout.workout_exercises);
+    const initialEdit = groups.map((g) => ({
+      name: g.name,
+      sets: g.sets.map((s) => ({ reps: s.reps, weight_kg: s.weight_kg })),
+    }));
+    setEditExercises(initialEdit);
+    setEditDate(selectedWorkout.occurred_date);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (editExercises.length === 0) {
+      showNotice("error", "Workout must have at least one exercise.");
+      return;
+    }
+    for (let i = 0; i < editExercises.length; i++) {
+      const ex = editExercises[i];
+      if (!ex.name.trim()) {
+        showNotice("error", `Exercise #${i + 1} must have a name.`);
+        return;
+      }
+      if (ex.sets.length === 0) {
+        showNotice("error", `Exercise "${ex.name}" must have at least one set.`);
+        return;
+      }
+      for (let j = 0; j < ex.sets.length; j++) {
+        const s = ex.sets[j];
+        if (isNaN(s.reps) || s.reps <= 0) {
+          showNotice("error", `Reps for set #${j + 1} in exercise "${ex.name}" must be a positive integer.`);
+          return;
+        }
+        if (isNaN(s.weight_kg) || s.weight_kg < 0) {
+          showNotice("error", `Weight for set #${j + 1} in exercise "${ex.name}" must be 0 or greater.`);
+          return;
+        }
+      }
+    }
+
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/workouts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedWorkoutId,
+          exercises: editExercises,
+          date: editDate,
+        }),
+      });
+
+      if (res.ok) {
+        showNotice("success", "Workout session updated successfully!");
+        setIsEditing(false);
+        setDate(editDate);
+        await loadWorkouts();
+      } else {
+        const err = await res.json();
+        showNotice("error", err.error || "Failed to update workout session.");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotice("error", "Failed to update workout session.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCombineWorkouts = async () => {
+    const workoutIds = dayWorkouts.map((w) => w.id);
+    if (!confirm(`Are you sure you want to combine all ${dayWorkouts.length} workout sessions for today into one?`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/workouts/combine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workoutIds }),
+      });
+
+      if (res.ok) {
+        const resData = await res.json();
+        showNotice("success", "Workouts successfully combined!");
+        await loadWorkouts();
+        if (resData.primary_workout_id) {
+          setSelectedWorkoutId(resData.primary_workout_id);
+        }
+      } else {
+        const err = await res.json();
+        showNotice("error", err.error || "Failed to combine workout sessions.");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotice("error", "Failed to combine workout sessions.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Sync calendar view when date changes
   useEffect(() => {
     setViewDate(new Date(date));
   }, [date]);
+
 
   // Load workouts
   const loadWorkouts = async () => {
@@ -323,7 +438,7 @@ export default function WorkoutsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
       <PageHeader active="workouts" data={null} />
 
       {/* Notification Toast */}
@@ -360,29 +475,36 @@ export default function WorkoutsPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", flex: 1 }}>
+      <main style={{ padding: "32px", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 28, height: "100%", maxWidth: 1180, margin: "0 auto" }}>
         {/* Left Panel: Workout Details or Log Form */}
         <div
+          className="grid-card"
           style={{
-            padding: "32px 40px",
+            padding: "24px 28px",
             display: "flex",
             flexDirection: "column",
-            gap: 28,
-            borderRight: `1px solid ${BROWN_LINE}`,
+            gap: 22,
+            minHeight: 0,
+            overflowY: "auto",
           }}
         >
+          <div className="zine-paperclip" />
           {/* Section Header */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              borderBottom: `1px solid ${BROWN_LINE}`,
-              paddingBottom: 16,
+              gap: 18,
             }}
           >
             <div>
-              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 300, color: "var(--text)" }}>
+              <div className="zine-eyebrow blue">
+                <span>↳ workouts</span>
+                <span>01</span>
+              </div>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "var(--text)" }}>
                 {formattedSelectedDate}
               </h1>
               <div
@@ -447,38 +569,36 @@ export default function WorkoutsPage() {
                   >
                     + Log New Session
                   </button>
+
+                  {dayWorkouts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleCombineWorkouts}
+                      style={{
+                        background: "transparent",
+                        color: "var(--rose)",
+                        border: `1px dashed var(--rose)`,
+                        borderRadius: 6,
+                        padding: "6px 12px",
+                        fontSize: 11,
+                        fontFamily: "var(--mono)",
+                        cursor: "pointer",
+                        transition: "background 0.2s, color 0.2s",
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = "rgba(178, 68, 68, 0.05)";
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      ⧉ Combine {dayWorkouts.length} Sessions
+                    </button>
+                  )}
                 </div>
               )}
             </div>
-
-            {date !== localIsoDate() && (
-              <button
-                type="button"
-                onClick={() => setDate(localIsoDate())}
-                style={{
-                  background: "none",
-                  border: "1px solid var(--blue)",
-                  color: "var(--blue)",
-                  padding: "6px 12px",
-                  cursor: "pointer",
-                  fontFamily: "var(--mono)",
-                  fontSize: 11,
-                  borderRadius: 6,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  fontWeight: 600,
-                  transition: "background 0.2s, color 0.2s",
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = "var(--blue-deep)";
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = "none";
-                }}
-              >
-                Go to Today
-              </button>
-            )}
+            <DateNavigator selectedDate={date} onChange={setDate} compact />
           </div>
 
           {actionLoading ? (
@@ -486,92 +606,403 @@ export default function WorkoutsPage() {
               <span className="mono" style={{ fontSize: 13 }}>Processing...</span>
             </div>
           ) : selectedWorkout ? (
-            /* VIEW WORKOUT DETAILS */
-            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-              <div>
-                <Eyebrow label="Logged Exercises" color="var(--blue)" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 12 }}>
-                  {groupExercises(selectedWorkout.workout_exercises).map((group, idx) => (
-                    <div
-                      key={idx}
+            isEditing ? (
+              /* EDIT WORKOUT DETAILS */
+              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                <div>
+                  <Eyebrow label="Edit Workout Playlist" color="var(--blue)" />
+                  
+                  {/* Workout Date input */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
+                    <label className="mono uc" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: "0.1em" }}>
+                      Workout Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
                       style={{
-                        padding: "16px 20px",
-                        background: "var(--bg-2)",
-                        border: "1px solid var(--line)",
-                        borderRadius: 8,
+                        padding: "10px 14px",
+                        borderRadius: 6,
+                        border: "1px solid var(--line-strong)",
+                        background: "var(--card)",
+                        color: "var(--text)",
+                        fontSize: 14,
+                        outline: "none",
+                        fontFamily: "var(--mono)",
+                        width: "100%",
+                        boxSizing: "border-box",
                       }}
-                    >
-                      <h3
+                    />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 12 }}>
+                    {editExercises.map((ex, idx) => (
+                      <div
+                        key={idx}
                         style={{
-                          margin: "0 0 12px 0",
-                          fontSize: 16,
-                          fontWeight: 500,
-                          color: "var(--text)",
-                          fontFamily: "var(--sans)",
-                          letterSpacing: "0.02em",
+                          padding: "20px",
+                          background: "var(--bg-2)",
+                          border: "1px solid var(--line)",
+                          borderRadius: 8,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 16,
+                          position: "relative",
                         }}
                       >
-                        {group.name}
-                      </h3>
-
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {group.sets.map((set) => (
-                          <div
-                            key={set.id}
+                        {/* Exercise Header */}
+                        <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+                          <input
+                            type="text"
+                            placeholder="Exercise Name"
+                            value={ex.name}
+                            onChange={(e) => {
+                              const updated = [...editExercises];
+                              updated[idx].name = e.target.value;
+                              setEditExercises(updated);
+                            }}
                             style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              padding: "6px 12px",
+                              padding: "8px 12px",
+                              borderRadius: 6,
                               border: "1px solid var(--line-strong)",
                               background: "var(--card)",
-                              borderRadius: 6,
-                              fontSize: 12.5,
-                              fontFamily: "var(--mono)",
                               color: "var(--text)",
+                              fontSize: 15,
+                              fontWeight: 500,
+                              fontFamily: "var(--sans)",
+                              outline: "none",
+                              flex: 1,
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditExercises(editExercises.filter((_, i) => i !== idx));
+                            }}
+                            style={{
+                              background: "none",
+                              border: "1px solid var(--rose)",
+                              color: "var(--rose)",
+                              borderRadius: 6,
+                              padding: "6px 12px",
+                              fontSize: 11,
+                              fontFamily: "var(--mono)",
+                              cursor: "pointer",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.08em",
+                              transition: "background 0.2s",
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.background = "rgba(178, 68, 68, 0.08)";
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.background = "none";
                             }}
                           >
-                            <span style={{ color: "var(--muted)", fontSize: 10 }}>SET {set.set_number}</span>
-                            <span style={{ fontWeight: 600, color: "var(--blue)" }}>{set.reps}</span>
-                            <span style={{ color: "var(--dim)" }}>×</span>
-                            <span>{set.weight_kg > 0 ? `${set.weight_kg} kg` : "BW"}</span>
-                          </div>
-                        ))}
+                            Delete
+                          </button>
+                        </div>
+
+                        {/* Sets List */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {ex.sets.map((set, setIdx) => (
+                            <div key={setIdx} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <span className="mono uc" style={{ fontSize: 9, color: "var(--muted)", width: 44, flexShrink: 0 }}>
+                                Set {setIdx + 1}
+                              </span>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <input
+                                  type="number"
+                                  placeholder="Reps"
+                                  value={set.reps}
+                                  onChange={(e) => {
+                                    const updated = [...editExercises];
+                                    updated[idx].sets[setIdx].reps = parseInt(e.target.value, 10) || 0;
+                                    setEditExercises(updated);
+                                  }}
+                                  style={{
+                                    width: 60,
+                                    padding: "6px 8px",
+                                    borderRadius: 4,
+                                    border: "1px solid var(--line-strong)",
+                                    background: "var(--card)",
+                                    color: "var(--text)",
+                                    fontSize: 13,
+                                    fontFamily: "var(--mono)",
+                                    outline: "none",
+                                    textAlign: "center",
+                                  }}
+                                />
+                                <span style={{ fontSize: 11, color: "var(--dim)" }}>reps</span>
+                              </div>
+
+                              <span style={{ fontSize: 11, color: "var(--dim)" }}>×</span>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  placeholder="Weight"
+                                  value={set.weight_kg}
+                                  onChange={(e) => {
+                                    const updated = [...editExercises];
+                                    updated[idx].sets[setIdx].weight_kg = parseFloat(e.target.value) || 0;
+                                    setEditExercises(updated);
+                                  }}
+                                  style={{
+                                    width: 70,
+                                    padding: "6px 8px",
+                                    borderRadius: 4,
+                                    border: "1px solid var(--line-strong)",
+                                    background: "var(--card)",
+                                    color: "var(--text)",
+                                    fontSize: 13,
+                                    fontFamily: "var(--mono)",
+                                    outline: "none",
+                                    textAlign: "center",
+                                  }}
+                                />
+                                <span style={{ fontSize: 11, color: "var(--dim)" }}>kg</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...editExercises];
+                                  updated[idx].sets = updated[idx].sets.filter((_, sIdx) => sIdx !== setIdx);
+                                  setEditExercises(updated);
+                                }}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  color: "var(--rose)",
+                                  fontSize: 18,
+                                  padding: "0 6px",
+                                }}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add Set Button */}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...editExercises];
+                              const lastSet = ex.sets[ex.sets.length - 1] || { reps: 10, weight_kg: 60 };
+                              updated[idx].sets.push({ reps: lastSet.reps, weight_kg: lastSet.weight_kg });
+                              setEditExercises(updated);
+                            }}
+                            style={{
+                              background: "none",
+                              border: "1px solid var(--blue)",
+                              color: "var(--blue)",
+                              borderRadius: 6,
+                              padding: "4px 10px",
+                              fontSize: 10,
+                              fontFamily: "var(--mono)",
+                              cursor: "pointer",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.08em",
+                            }}
+                          >
+                            + Add Set
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+
+                  {/* Add New Exercise Button */}
+                  <div style={{ marginTop: 16 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditExercises([...editExercises, { name: "", sets: [{ reps: 10, weight_kg: 60 }] }]);
+                      }}
+                      style={{
+                        width: "100%",
+                        background: "transparent",
+                        color: "var(--blue)",
+                        border: "1px dashed var(--blue)",
+                        borderRadius: 8,
+                        padding: "12px",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontFamily: "var(--mono)",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      + Add New Exercise
+                    </button>
+                  </div>
+                </div>
+
+                {/* Save / Cancel Controls */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12, borderTop: `1px solid ${BROWN_LINE}`, paddingTop: 20 }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveEdit}
+                    style={{
+                      background: "var(--blue)",
+                      color: "#fffaf0",
+                      border: "none",
+                      padding: "12px 20px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: "var(--mono)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      textAlign: "center",
+                    }}
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid var(--line-strong)",
+                      color: "var(--muted)",
+                      padding: "12px 20px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: "var(--mono)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      textAlign: "center",
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
+            ) : (
+              /* VIEW WORKOUT DETAILS */
+              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                <div>
+                  <Eyebrow label="Logged Exercises" color="var(--blue)" />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 12 }}>
+                    {groupExercises(selectedWorkout.workout_exercises).map((group, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: "16px 20px",
+                          background: "var(--bg-2)",
+                          border: "1px solid var(--line)",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <h3
+                          style={{
+                            margin: "0 0 12px 0",
+                            fontSize: 16,
+                            fontWeight: 500,
+                            color: "var(--text)",
+                            fontFamily: "var(--sans)",
+                            letterSpacing: "0.02em",
+                          }}
+                        >
+                          {group.name}
+                        </h3>
 
-              <div style={{ marginTop: 12, borderTop: `1px solid ${BROWN_LINE}`, paddingTop: 20 }}>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteWorkout(selectedWorkout.id)}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid var(--rose)",
-                    color: "var(--rose)",
-                    padding: "10px 18px",
-                    borderRadius: 6,
-                    cursor: "pointer",
-                    fontFamily: "var(--mono)",
-                    fontSize: 12,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    fontWeight: 500,
-                    transition: "background 0.2s, color 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = "rgba(178, 68, 68, 0.08)";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                  }}
-                >
-                  Delete Workout Session
-                </button>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {group.sets.map((set) => (
+                            <div
+                              key={set.id}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                padding: "6px 12px",
+                                border: "1px solid var(--line-strong)",
+                                background: "var(--card)",
+                                borderRadius: 6,
+                                fontSize: 12.5,
+                                fontFamily: "var(--mono)",
+                                color: "var(--text)",
+                              }}
+                            >
+                              <span style={{ color: "var(--muted)", fontSize: 10 }}>SET {set.set_number}</span>
+                              <span style={{ fontWeight: 600, color: "var(--blue)" }}>{set.reps}</span>
+                              <span style={{ color: "var(--dim)" }}>×</span>
+                              <span>{set.weight_kg > 0 ? `${set.weight_kg} kg` : "BW"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 12, marginTop: 12, borderTop: `1px solid ${BROWN_LINE}`, paddingTop: 20 }}>
+                  <button
+                    type="button"
+                    onClick={startEditing}
+                    style={{
+                      background: "var(--blue)",
+                      color: "#fffaf0",
+                      border: "none",
+                      padding: "10px 18px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontFamily: "var(--mono)",
+                      fontSize: 12,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontWeight: 500,
+                      transition: "background 0.2s, color 0.2s",
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.1)";
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.filter = "none";
+                    }}
+                  >
+                    Edit Workout
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteWorkout(selectedWorkout.id)}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid var(--rose)",
+                      color: "var(--rose)",
+                      padding: "10px 18px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontFamily: "var(--mono)",
+                      fontSize: 12,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontWeight: 500,
+                      transition: "background 0.2s, color 0.2s",
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = "rgba(178, 68, 68, 0.08)";
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    Delete Workout Session
+                  </button>
+                </div>
               </div>
-            </div>
+            )
           ) : (
             /* LOG WORKOUT FORM */
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -836,138 +1267,24 @@ export default function WorkoutsPage() {
 
         {/* Right Panel: Calendar Picker & Log Summaries */}
         <div
+          className="grid-card"
           style={{
-            padding: "32px 36px",
+            padding: "24px",
             display: "flex",
             flexDirection: "column",
-            gap: 32,
+            gap: 18,
+            minHeight: 0,
           }}
         >
-          {/* Calendar Selector */}
-          <div>
-            <Eyebrow label="Workout Calendar" color="var(--blue)" />
-
-            {/* Calendar Month Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, marginTop: 12 }}>
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month - 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ‹
-              </button>
-
-              <div className="mono uc" style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", letterSpacing: "0.14em" }}>
-                {format(viewDate, "MMMM yyyy")}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month + 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ›
-              </button>
-            </div>
-
-            {/* Calendar Weekdays */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center", marginBottom: 8 }}>
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-                <div key={day} className="mono uc" style={{ fontSize: 9.5, color: "var(--dim)", fontWeight: 500 }}>
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Grid Cells */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-              {calendarDays.map((day, idx) => {
-                const isSelected = day.isoStr === date;
-                const isDayToday = day.isoStr === localIsoDate();
-                const hasWorkout = workoutDates.has(day.isoStr);
-
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setDate(day.isoStr)}
-                    style={{
-                      aspectRatio: "1",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: isSelected ? "var(--blue)" : "transparent",
-                      color: isSelected ? "#fffaf0" : day.isCurrentMonth ? "var(--text)" : "var(--dim)",
-                      border: isDayToday && !isSelected ? "1px solid var(--blue)" : "none",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      fontFamily: "var(--mono)",
-                      fontWeight: isSelected ? "600" : "400",
-                      position: "relative",
-                      transition: "background 0.15s, color 0.15s",
-                    }}
-                    onMouseOver={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "var(--bg-2)";
-                    }}
-                    onMouseOut={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    <span>{day.dayNum}</span>
-                    {hasWorkout && (
-                      <span
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: "50%",
-                          background: isSelected ? "#fffaf0" : "var(--blue)",
-                          position: "absolute",
-                          bottom: 3,
-                        }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <div className="zine-paperclip" />
 
           {/* Recent Workouts List */}
-          <div>
-            <Eyebrow label="Recent Sessions" color="var(--blue)" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div className="zine-eyebrow blue">
+              <span>↳ recent sessions</span>
+              <span>02</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 2, overflowY: "auto", minHeight: 0 }}>
               {recentWorkouts.length > 0 ? (
                 recentWorkouts.map((w) => {
                   const isSelected = w.id === selectedWorkoutId;
@@ -990,8 +1307,8 @@ export default function WorkoutsPage() {
                         width: "100%",
                         padding: "12px 14px",
                         background: isSelected ? "var(--bg-2)" : "transparent",
-                        border: `1px solid ${isSelected ? "var(--blue)" : "var(--line)"}`,
-                        borderRadius: 8,
+                        border: `2px solid ${isSelected ? "#000" : "var(--line)"}`,
+                        borderRadius: 0,
                         cursor: "pointer",
                         textAlign: "left",
                         gap: 4,
@@ -1045,6 +1362,7 @@ export default function WorkoutsPage() {
           </div>
         </div>
       </div>
+      </main>
     </div>
   );
 }

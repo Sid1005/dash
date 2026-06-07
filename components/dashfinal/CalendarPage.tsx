@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useState, useMemo, FormEvent } from "react";
-import { format, parseISO } from "date-fns";
+import { useState, useMemo, FormEvent } from "react";
+import { format } from "date-fns";
 import {
   PageHeader,
-  LoadingPage,
-  Eyebrow,
   useDayView,
   localIsoDate,
   nowMinutes,
   DayTimeline,
-  BROWN_LINE,
+  DateNavigator,
 } from "./DashFinal";
 
 export function CalendarPage() {
@@ -21,86 +19,6 @@ export function CalendarPage() {
   const now = nowMinutes();
   const isToday = date === today;
 
-  const [viewDate, setViewDate] = useState(() => new Date(date));
-
-  // Sync calendar view when date changes
-  useEffect(() => {
-    setViewDate(new Date(date));
-  }, [date]);
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-
-  // Generate calendar days for monthly grid
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month, 1);
-    const startDayOfWeek = firstDay.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-    const result: { isoStr: string; isCurrentMonth: boolean; dayNum: number }[] = [];
-
-    // Prepend previous month days
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1, daysInPrevMonth - i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: daysInPrevMonth - i,
-      });
-    }
-
-    // Add current month days
-    for (let i = 1; i <= daysInMonth; i++) {
-      const d = new Date(year, month, i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: true,
-        dayNum: i,
-      });
-    }
-
-    // Pad next month days to multiples of 7 (at least 35 or 42 cells)
-    const totalCells = Math.ceil(result.length / 7) * 7;
-    const padDays = totalCells - result.length;
-    for (let i = 1; i <= padDays; i++) {
-      const d = new Date(year, month + 1, i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: i,
-      });
-    }
-
-    // Keep grid height stable at exactly 6 rows (42 cells)
-    while (result.length < 42) {
-      const nextDayIdx = result.length - startDayOfWeek - daysInMonth + 1;
-      const d = new Date(year, month + 1, nextDayIdx);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: nextDayIdx,
-      });
-    }
-
-    return result;
-  }, [year, month]);
-
-  function shiftDate(delta: number) {
-    const d = new Date(`${date}T12:00:00`);
-    d.setDate(d.getDate() + delta);
-    setDate(localIsoDate(d));
-  }
-
-  // Google Calendar Event form state
-  const [calTitle, setCalTitle] = useState("");
-  const [calStart, setCalStart] = useState("");
-  const [calEnd, setCalEnd] = useState("");
-  const [calLocation, setCalLocation] = useState("");
-  const [calDescription, setCalDescription] = useState("");
-  const [calSubmitting, setCalSubmitting] = useState(false);
-  const [calError, setCalError] = useState("");
-
   // Time Block form state
   const [blockTitle, setBlockTitle] = useState("");
   const [blockStart, setBlockStart] = useState("");
@@ -109,78 +27,9 @@ export function CalendarPage() {
   const [blockSubmitting, setBlockSubmitting] = useState(false);
   const [blockError, setBlockError] = useState("");
 
-  // Filter blocks from dayData
-  const calendarEvents = useMemo(() => {
-    return dayData?.blocks.filter((b) => b.kind === "cal") ?? [];
-  }, [dayData]);
-
   const timeBlocks = useMemo(() => {
     return dayData?.blocks.filter((b) => b.kind === "blk") ?? [];
   }, [dayData]);
-
-  // Handler for adding Google Calendar Event
-  async function handleAddCalEvent(e: FormEvent) {
-    e.preventDefault();
-    if (!calTitle || !calStart || !calEnd) {
-      setCalError("Title, start time, and end time are required.");
-      return;
-    }
-    if (calEnd <= calStart) {
-      setCalError("End time must be after start time.");
-      return;
-    }
-    setCalError("");
-    setCalSubmitting(true);
-
-    try {
-      const res = await fetch("/api/calendar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: calTitle,
-          start: `${date}T${calStart}:00+05:30`,
-          end: `${date}T${calEnd}:00+05:30`,
-          location: calLocation,
-          description: calDescription,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to create calendar event");
-      }
-
-      setCalTitle("");
-      setCalStart("");
-      setCalEnd("");
-      setCalLocation("");
-      setCalDescription("");
-      setRefreshTrigger((prev) => prev + 1);
-    } catch (err: any) {
-      setCalError(err.message || "An error occurred.");
-    } finally {
-      setCalSubmitting(false);
-    }
-  }
-
-  // Handler for deleting Google Calendar Event
-  async function handleDeleteCalEvent(id: string) {
-    if (!confirm("Are you sure you want to delete this Google Calendar event?")) return;
-    try {
-      const res = await fetch("/api/calendar", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to delete event");
-      }
-      setRefreshTrigger((prev) => prev + 1);
-    } catch (err: any) {
-      alert(err.message || "Failed to delete event.");
-    }
-  }
 
   // Handler for adding Time Block
   async function handleAddTimeBlock(e: FormEvent) {
@@ -255,289 +104,42 @@ export function CalendarPage() {
   const labelDate = format(new Date(`${date}T12:00:00`), "EEEE, MMMM d, yyyy");
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", color: "var(--text)" }}>
       <PageHeader active="calendar" data={null} />
 
-      {/* Date Navigation */}
-      <div style={{ padding: "14px 40px", borderBottom: `1px solid ${BROWN_LINE}`, display: "flex", alignItems: "center", gap: 24 }}>
-        <button
-          type="button"
-          onClick={() => shiftDate(-1)}
-          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 18, padding: "0 4px", lineHeight: 1 }}
-        >
-          ‹
-        </button>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 300, color: "var(--text)", letterSpacing: "0.04em" }}>{labelDate}</div>
-          {isToday && <div className="mono uc" style={{ fontSize: 10, color: "var(--blue)", letterSpacing: "0.22em", marginTop: 2 }}>today</div>}
-        </div>
-        <button
-          type="button"
-          onClick={() => shiftDate(1)}
-          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 18, padding: "0 4px", lineHeight: 1 }}
-        >
-          ›
-        </button>
-        {!isToday && (
-          <button
-            type="button"
-            onClick={() => setDate(today)}
-            style={{ background: "none", border: "1px solid var(--line)", borderRadius: 4, cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: "4px 10px", fontFamily: "var(--mono)", letterSpacing: "0.1em" }}
-          >
-            today
-          </button>
-        )}
-      </div>
-
-      {/* Split Layout Container */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(380px, 460px)", flex: 1, maxHeight: "calc(100vh - 120px)", overflow: "hidden" }}>
-        
-        {/* Left Panel: Scrollable Timeline */}
-        <div style={{ padding: "32px 40px", overflowY: "auto" }}>
-          <Eyebrow label="Events & Schedule" right={`${dayData?.blocks.length ?? 0} blocks`} />
-          {dayData ? (
-            <DayTimeline blocks={dayData.blocks} tasks={[]} nowMin={now} isToday={isToday} />
-          ) : (
-            <div style={{ color: "var(--muted)", padding: "40px 0" }}>Loading…</div>
-          )}
-        </div>
-
-        {/* Right Panel: Calendar picker + forms & lists */}
-        <div
-          style={{
-            padding: "32px 36px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 36,
-            borderLeft: `1px solid ${BROWN_LINE}`,
-            overflowY: "auto",
-            background: "rgba(255, 255, 255, 0.01)",
-          }}
-        >
-          {/* Calendar month picker */}
-          <div>
-            <Eyebrow label="Calendar Selection" color="var(--blue)" />
-            
-            {/* Calendar Month Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month - 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ‹
-              </button>
-              
-              <div className="mono uc" style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", letterSpacing: "0.14em" }}>
-                {format(viewDate, "MMMM yyyy")}
+      <main style={{ padding: "32px", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(340px, 430px)", gap: 28, height: "100%", maxWidth: 1180, margin: "0 auto" }}>
+          <section className="grid-card" style={{ padding: "24px 28px", minHeight: 0, display: "flex", flexDirection: "column", gap: 18 }}>
+            <div className="zine-paperclip" />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexShrink: 0 }}>
+              <div>
+                <div className="zine-eyebrow blue">
+                  <span>↳ schedule</span>
+                  <span>01</span>
+                </div>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: 0 }}>{labelDate}</h1>
               </div>
-              
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month + 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ›
-              </button>
-            </div>
-
-            {/* Calendar Weekday Names */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center", marginBottom: 8 }}>
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-                <div key={day} className="mono uc" style={{ fontSize: 9.5, color: "var(--dim)", fontWeight: 500 }}>
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Grid Cells */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-              {calendarDays.map((day, idx) => {
-                const isSelected = day.isoStr === date;
-                const isDayToday = day.isoStr === today;
-                
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setDate(day.isoStr)}
-                    style={{
-                      aspectRatio: "1",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: isSelected ? "var(--blue)" : "transparent",
-                      color: isSelected ? "#fffaf0" : day.isCurrentMonth ? "var(--text)" : "var(--dim)",
-                      border: isDayToday && !isSelected ? "1px solid var(--blue)" : "none",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      fontFamily: "var(--mono)",
-                      fontWeight: isSelected ? "600" : "400",
-                      position: "relative",
-                      transition: "background 0.15s, color 0.15s",
-                    }}
-                    onMouseOver={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "var(--bg-2)";
-                    }}
-                    onMouseOut={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    {day.dayNum}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <hr style={{ border: "none", borderTop: `1px solid ${BROWN_LINE}`, margin: 0 }} />
-
-          {/* Google Calendar Section */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <Eyebrow label="Google Calendar" color="var(--rose)" />
-            
-            {/* Form */}
-            <form onSubmit={handleAddCalEvent} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <input
-                type="text"
-                placeholder="Event Title"
-                value={calTitle}
-                onChange={(e) => setCalTitle(e.target.value)}
-                required
-                style={inputStyle}
-              />
-              
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={labelStyle}>Start Time</label>
-                  <input
-                    type="time"
-                    value={calStart}
-                    onChange={(e) => setCalStart(e.target.value)}
-                    required
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={labelStyle}>End Time</label>
-                  <input
-                    type="time"
-                    value={calEnd}
-                    onChange={(e) => setCalEnd(e.target.value)}
-                    required
-                    style={inputStyle}
-                  />
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                {isToday && <span className="mono uc" style={{ fontSize: 9, color: "var(--blue)", letterSpacing: "0.15em" }}>today</span>}
+                <DateNavigator selectedDate={date} onChange={setDate} compact />
               </div>
-
-              <input
-                type="text"
-                placeholder="Location (Optional)"
-                value={calLocation}
-                onChange={(e) => setCalLocation(e.target.value)}
-                style={inputStyle}
-              />
-
-              <textarea
-                placeholder="Description (Optional)"
-                value={calDescription}
-                onChange={(e) => setCalDescription(e.target.value)}
-                rows={2}
-                style={{ ...inputStyle, resize: "none" }}
-              />
-
-              {calError && <div style={errorStyle}>{calError}</div>}
-
-              <button
-                type="submit"
-                disabled={calSubmitting}
-                style={{
-                  ...buttonStyle,
-                  background: "var(--blue)",
-                }}
-              >
-                {calSubmitting ? "Adding to Google Calendar..." : "Add Google Calendar Event"}
-              </button>
-            </form>
-
-            {/* List */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-              <div style={listHeaderStyle}>Today's Calendar Events ({calendarEvents.length})</div>
-              {calendarEvents.length === 0 ? (
-                <div style={emptyListStyle}>No calendar events today.</div>
+            </div>
+            <div style={{ overflowY: "auto", minHeight: 0 }}>
+              {dayData ? (
+                <DayTimeline blocks={dayData.blocks} tasks={[]} nowMin={now} isToday={isToday} />
               ) : (
-                calendarEvents.map((event) => (
-                  <div key={event.id} style={listItemStyle}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={listItemTitleStyle}>{event.label}</div>
-                      <div style={listItemMetaStyle}>
-                        <span>{event.start} - {event.end}</span>
-                        {event.loc && <span style={{ marginLeft: 8 }}>· {event.loc}</span>}
-                      </div>
-                    </div>
-                    {event.id && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCalEvent(event.id!)}
-                        style={deleteButtonStyle}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "rgba(244, 63, 94, 0.1)";
-                          e.currentTarget.style.borderColor = "var(--rose)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "none";
-                          e.currentTarget.style.borderColor = "rgba(244, 63, 94, 0.3)";
-                        }}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                ))
+                <div className="mono uc" style={{ color: "var(--dim)", padding: "40px 0", fontSize: 11, letterSpacing: "0.14em" }}>Loading schedule</div>
               )}
             </div>
-          </div>
+          </section>
 
-          <hr style={{ border: "none", borderTop: `1px solid ${BROWN_LINE}`, margin: 0 }} />
-
-          {/* Local Time Blocks Section */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <Eyebrow label="Daily Schedule Blocks" color="var(--blue)" />
-            
-            {/* Form */}
-            <form onSubmit={handleAddTimeBlock} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <aside style={{ display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
+            <form onSubmit={handleAddTimeBlock} className="grid-card" style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 10 }}>
+              <div className="zine-paperclip" />
+              <div className="zine-eyebrow blue">
+                <span>↳ add schedule block</span>
+                <span>02</span>
+              </div>
               <input
                 type="text"
                 placeholder="Block Activity Title"
@@ -546,8 +148,8 @@ export function CalendarPage() {
                 required
                 style={inputStyle}
               />
-              
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <label style={labelStyle}>Start Time</label>
                   <input
@@ -592,20 +194,22 @@ export function CalendarPage() {
               <button
                 type="submit"
                 disabled={blockSubmitting}
-                style={{
-                  ...buttonStyle,
-                  background: "rgba(36, 84, 214, 0.1)",
-                  border: "1px solid var(--blue)",
-                  color: "var(--blue)",
-                }}
+                style={buttonStyle}
               >
-                {blockSubmitting ? "Adding Schedule Block..." : "Add Schedule Block"}
+                {blockSubmitting ? "Adding..." : "Add Schedule Block"}
               </button>
             </form>
 
-            {/* List */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-              <div style={listHeaderStyle}>Today's Schedule Blocks ({timeBlocks.length})</div>
+            <div className="grid-card" style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0 }}>
+              <div className="zine-paperclip" />
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                <div className="zine-eyebrow">
+                  <span>↳ schedule blocks</span>
+                  <span>03</span>
+                </div>
+                <span className="mono" style={{ fontSize: 15 }}>{timeBlocks.length} blocks</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", minHeight: 0 }}>
               {timeBlocks.length === 0 ? (
                 <div style={emptyListStyle}>No schedule blocks today.</div>
               ) : (
@@ -644,23 +248,23 @@ export function CalendarPage() {
                   </div>
                 ))
               )}
+              </div>
             </div>
-          </div>
-
+          </aside>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
 
 // Inline styles aligned with warm light beige theme
 const inputStyle = {
-  background: "var(--bg-2)",
-  border: "1px solid var(--line)",
-  borderRadius: "6px",
+  background: "var(--bg)",
+  border: "2px solid #000",
+  borderRadius: 0,
   color: "var(--text)",
   fontSize: "13px",
-  padding: "10px 14px",
+  padding: "9px 11px",
   outline: "none",
   width: "100%",
   fontFamily: "inherit",
@@ -668,7 +272,7 @@ const inputStyle = {
 };
 
 const labelStyle = {
-  fontSize: "10px",
+  fontSize: "9px",
   fontFamily: "var(--mono)",
   textTransform: "uppercase" as const,
   letterSpacing: "0.1em",
@@ -676,51 +280,57 @@ const labelStyle = {
 };
 
 const buttonStyle = {
-  border: "none",
-  borderRadius: "6px",
-  color: "#fffaf0",
+  background: "#0c0c0e",
+  border: "2px solid #000",
+  borderRadius: 0,
+  color: "#fff",
   cursor: "pointer",
-  fontSize: "13px",
-  fontWeight: 500,
-  padding: "12px 16px",
+  fontSize: "11px",
+  fontFamily: "var(--mono)",
+  fontWeight: 800,
+  letterSpacing: "0.12em",
+  padding: "9px 12px",
+  textTransform: "uppercase" as const,
   transition: "opacity 0.2s, transform 0.1s active",
 };
 
 const errorStyle = {
   color: "var(--rose)",
-  fontSize: "12px",
+  fontSize: "11.5px",
   fontFamily: "var(--mono)",
 };
 
 const listHeaderStyle = {
-  fontSize: "11px",
+  fontSize: "10px",
   fontFamily: "var(--mono)",
   textTransform: "uppercase" as const,
   letterSpacing: "0.12em",
   color: "var(--muted)",
-  marginBottom: "4px",
+  marginBottom: "3px",
 };
 
 const emptyListStyle = {
-  fontSize: "13px",
+  fontSize: "12.5px",
   color: "var(--dim)",
-  fontStyle: "italic",
-  padding: "8px 0",
+  fontFamily: "var(--mono)",
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.12em",
+  padding: "10px 0",
 };
 
 const listItemStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "10px 12px",
-  background: "var(--bg-2)",
-  border: "1px solid var(--line)",
-  borderRadius: "6px",
-  gap: "12px",
+  padding: "10px 0",
+  background: "transparent",
+  borderBottom: "1px dashed #000",
+  borderRadius: 0,
+  gap: "10px",
 };
 
 const listItemTitleStyle = {
-  fontSize: "13.5px",
+  fontSize: "13px",
   color: "var(--text)",
   fontWeight: 400,
   whiteSpace: "nowrap" as const,
@@ -729,21 +339,21 @@ const listItemTitleStyle = {
 };
 
 const listItemMetaStyle = {
-  fontSize: "11.5px",
+  fontSize: "11px",
   color: "var(--muted)",
   fontFamily: "var(--mono)",
-  marginTop: "2px",
+  marginTop: "1px",
 };
 
 const deleteButtonStyle = {
   background: "none",
-  border: "1px solid rgba(244, 63, 94, 0.3)",
-  borderRadius: "4px",
+  border: "none",
+  borderRadius: 0,
   color: "var(--rose)",
   cursor: "pointer",
-  fontSize: "11px",
+  fontSize: "10.5px",
   fontFamily: "var(--mono)",
-  padding: "4px 8px",
+  padding: "3px 6px",
   transition: "background 0.2s, border-color 0.2s, color 0.2s",
 };
 

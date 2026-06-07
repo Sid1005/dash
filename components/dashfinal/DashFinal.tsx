@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { format, parseISO, subDays } from "date-fns";
-import { Pencil, Sun, Moon } from "lucide-react";
+import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check } from "lucide-react";
 
 type TaskApiRow = {
   id: string;
@@ -91,6 +91,13 @@ export type DashLearning = {
   tag: string;
 };
 
+export type QuoteRow = {
+  id: string;
+  text: string;
+  author: string | null;
+  created_at: string;
+};
+
 type DashFeed = {
   t: string;
   who: "telegram" | "agent" | "calendar" | "system" | "user";
@@ -120,6 +127,7 @@ export type DashData = {
   };
   SCHEDULE_FOLLOWED_MIN: number;
   SCHEDULE_ELAPSED_MIN: number;
+  QUOTES: QuoteRow[];
 };
 
 // ── Day timeline ──────────────────────────────────────────────────────────────
@@ -194,7 +202,7 @@ function isoToTime(iso: string) {
   }).format(d);
 }
 
-function dueLabel(iso: string) {
+export function dueLabel(iso: string) {
   const d = parseISO(iso);
   if (isNaN(d.getTime())) return "";
   const today = localIsoDate();
@@ -217,7 +225,7 @@ function dueLabel(iso: string) {
   }).format(d);
 }
 
-function weightForTask(title: string): "S" | "M" | "L" {
+export function weightForTask(title: string): "S" | "M" | "L" {
   if (title.length > 80) return "L";
   if (title.length > 42) return "M";
   return "S";
@@ -235,8 +243,24 @@ function sortBlocks(blocks: DashBlock[]) {
   return [...blocks].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
 }
 
-export function useDashData(dateOverride?: string): DashData | null {
+export function useDashData(
+  dateOverride?: string,
+  refreshTrigger?: number,
+  options?: {
+    includeLearnings?: boolean;
+    includeTasks?: boolean;
+    includeCalendar?: boolean;
+    includeProblems?: boolean;
+    includeQuotes?: boolean;
+  }
+): DashData | null {
   const [data, setData] = useState<DashData | null>(null);
+
+  const includeLearnings = options?.includeLearnings ?? true;
+  const includeTasks = options?.includeTasks ?? true;
+  const includeCalendar = options?.includeCalendar ?? true;
+  const includeProblems = options?.includeProblems ?? true;
+  const includeQuotes = options?.includeQuotes ?? true;
 
   useEffect(() => {
     let cancelled = false;
@@ -244,29 +268,52 @@ export function useDashData(dateOverride?: string): DashData | null {
     async function load() {
       const today = dateOverride || localIsoDate();
       const learningDates = Array.from({ length: 14 }, (_, i) => localIsoDate(subDays(new Date(today), i)));
+
+      const dailyResPromise = fetch(`/api/daily?date=${today}`).then((r) => r.json());
+
+      const tasksResPromise = includeTasks
+        ? fetch("/api/tasks").then((r) => r.json()).catch(() => ({ tasks: [] }))
+        : Promise.resolve({ tasks: [] });
+
+      const calendarResPromise = includeCalendar
+        ? fetch(`/api/calendar?date=${today}`).then((r) => r.json()).catch(() => ({ events: [] }))
+        : Promise.resolve({ events: [] });
+
+      const problemsResPromise = includeProblems
+        ? fetch("/api/problems").then((r) => r.json()).catch(() => ({ problems: [] }))
+        : Promise.resolve({ problems: [] });
+
+      const learningsResPromise = includeLearnings
+        ? fetch(`/api/learnings?startDate=${learningDates[13]}&endDate=${today}`)
+            .then((r) => r.json())
+            .then((j) => {
+              const items = (j.items ?? []) as { id: string; text: string; date: string }[];
+              return learningDates.map((d) => ({
+                date: d,
+                items: items.filter((item) => item.date === d),
+              }));
+            })
+            .catch(() => learningDates.map((d) => ({ date: d, items: [] })))
+        : Promise.resolve([]);
+
+      const quotesResPromise = includeQuotes
+        ? fetch("/api/quotes").then((r) => r.json()).catch(() => ({ quotes: [] }))
+        : Promise.resolve({ quotes: [] });
+
       const [
         dailyRes,
         tasksRes,
         calendarRes,
-        visionRes,
-        goalsRes,
         problemsRes,
         learningsRes,
+        quotesRes,
       ] = await Promise.all([
-        fetch(`/api/daily?date=${today}`).then((r) => r.json()),
-        fetch("/api/tasks").then((r) => r.json()).catch(() => ({ tasks: [] })),
-        fetch(`/api/calendar?date=${today}`).then((r) => r.json()).catch(() => ({ events: [] })),
-        fetch("/api/lifeswork/vision").then((r) => r.json()).catch(() => ({ content: "" })),
-        fetch("/api/lifeswork/goals").then((r) => r.json()).catch(() => ({ content: "" })),
-        fetch("/api/problems").then((r) => r.json()).catch(() => ({ problems: [] })),
-        Promise.all(
-          learningDates.map((date) =>
-            fetch(`/api/learnings?date=${date}`)
-              .then((r) => r.json())
-              .then((j) => ({ date, items: j.items ?? [] }))
-              .catch(() => ({ date, items: [] }))
-          )
-        ),
+        dailyResPromise,
+        tasksResPromise,
+        calendarResPromise,
+        problemsResPromise,
+        learningsResPromise,
+        quotesResPromise,
       ]);
 
       if (cancelled) return;
@@ -434,11 +481,8 @@ export function useDashData(dateOverride?: string): DashData | null {
           dateIso: today,
           dateLong: format(new Date(`${today}T12:00:00`), "EEEE, MMMM d, yyyy"),
         },
-        FOCUS: { title: taskRows[0]?.title ?? firstUsefulLine(goalsRes.content ?? "", "Choose the next important task.") },
-        VISION_LINE: firstUsefulLine(
-          visionRes.content ?? "",
-          "Build tools that make one person feel like a team of ten."
-        ),
+        FOCUS: { title: taskRows[0]?.title ?? "Choose the next important task." },
+        VISION_LINE: "Build tools that make one person feel like a team of ten.",
         PROBLEMS: problemsRes.problems ?? [],
         BLOCKS: blocks,
         TASKS: taskRows,
@@ -455,6 +499,7 @@ export function useDashData(dateOverride?: string): DashData | null {
         },
         SCHEDULE_FOLLOWED_MIN: elapsed,
         SCHEDULE_ELAPSED_MIN: Math.max(1, elapsed || Math.min(scheduled, now - 6 * 60)),
+        QUOTES: quotesRes.quotes ?? [],
       });
     }
 
@@ -466,7 +511,7 @@ export function useDashData(dateOverride?: string): DashData | null {
     return () => {
       cancelled = true;
     };
-  }, [dateOverride]);
+  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeCalendar, includeProblems, includeQuotes]);
 
   return data;
 }
@@ -593,60 +638,39 @@ export function Eyebrow({
 }
 
 const NAV_ITEMS = [
-  { id: "cockpit", label: "Cockpit", href: "/" },
-  { id: "scratchpad", label: "Scratchpad", href: "/scratchpad" },
-  { id: "tasks", label: "Tasks & Learning", href: "/tasks" },
-  { id: "activities", label: "Activities", href: "/activities" },
-  { id: "calendar", label: "Calendar", href: "/calendar" },
-  { id: "food", label: "Food & Spending", href: "/food" },
-  { id: "workouts", label: "Workouts", href: "/workouts" },
-  { id: "lifeswork", label: "Life's Work", href: "/lifeswork" },
+  { id: "cockpit", label: "cockpit", href: "/" },
+  { id: "scratchpad", label: "scratchpad", href: "/scratchpad" },
+  { id: "tasks", label: "tasks & learning", href: "/tasks" },
+  { id: "activities", label: "activities", href: "/activities" },
+  { id: "calendar", label: "calendar", href: "/calendar" },
+  { id: "food", label: "food & spend", href: "/food" },
+  { id: "workouts", label: "workouts", href: "/workouts" },
+  { id: "ideas", label: "ideas", href: "/ideas" },
 ];
 
-function Nav({ active }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "lifeswork" | "scratchpad" }) {
+function Nav({ active }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas" | "scratchpad" }) {
   return (
-    <nav style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-      {NAV_ITEMS.map((item, idx) => (
-        <div key={item.id} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-          {idx > 0 && (
-            <span
-              style={{
-                display: "inline-block",
-                width: 1,
-                height: 16,
-                background: "var(--line-strong)",
-                margin: "0 10px",
-                opacity: 0.6,
-                flexShrink: 0,
-              }}
-            />
-          )}
-          <Link
-            href={item.href}
-            className="mono uc"
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.18em",
-              textDecoration: "none",
-              padding: "5px 10px",
-              borderRadius: 5,
-              transition: "background 0.15s, color 0.15s",
-              color: item.id === active ? "#fffaf0" : "var(--muted)",
-              background: item.id === active ? "var(--blue)" : "transparent",
-              fontWeight: item.id === active ? 600 : 400,
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            {item.label}
-          </Link>
-        </div>
+    <nav style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+      {NAV_ITEMS.map((item) => (
+        <Link
+          key={item.id}
+          href={item.href}
+          className={`mono nav-link ${item.id === active ? "nav-link-active" : ""}`}
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.05em",
+            textTransform: "lowercase",
+            outline: "none",
+          }}
+        >
+          {item.label}
+        </Link>
       ))}
     </nav>
   );
 }
 
-export function PageHeader({ active, data }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "lifeswork" | "scratchpad"; data: DashData | null }) {
+export function PageHeader({ active, data }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas" | "scratchpad"; data: DashData | null }) {
   const now = data?.NOW_MIN ?? nowMinutes();
   const t = `${String(Math.floor(now / 60)).padStart(2, "0")}:${String(now % 60).padStart(2, "0")}`;
   return (
@@ -654,58 +678,262 @@ export function PageHeader({ active, data }: { active: "cockpit" | "calendar" | 
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 16,
-        padding: "18px 24px",
-        borderBottom: `1px solid ${BROWN_LINE}`,
+        justifyContent: "space-between",
+        padding: "16px 40px",
+        borderBottom: "1px solid var(--line)",
+        backgroundColor: "var(--bg)",
+        flexShrink: 0,
+        zIndex: 100
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div
           style={{
             width: 22,
             height: 22,
-            borderRadius: 4,
-            background: "var(--blue)",
+            border: "2px solid var(--text)",
             display: "grid",
             placeItems: "center",
             fontFamily: "var(--mono)",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#fffaf0",
+            fontSize: 12,
+            fontWeight: 800,
+            color: "var(--text)"
           }}
         >
           D
         </div>
-        <div className="mono uc" style={{ fontSize: 11, color: "var(--text)", letterSpacing: "0.28em", fontWeight: 500 }}>
+        <span className="mono" style={{ fontSize: 12, letterSpacing: "0.15em", fontWeight: 600 }}>
           DASH
-        </div>
+        </span>
       </div>
-
-      <span
-        style={{
-          display: "inline-block",
-          width: 1,
-          height: 16,
-          background: "var(--line-strong)",
-          opacity: 0.6,
-          flexShrink: 0,
-          margin: "0 4px",
-        }}
-      />
 
       <Nav active={active} />
 
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 18, flexShrink: 0 }}>
-        <span className="mono" style={{ fontSize: 21, color: "var(--text)", fontWeight: 300, letterSpacing: "0", lineHeight: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        <span className="mono" style={{ fontSize: 16, fontWeight: 500 }}>
           {t}
         </span>
-        <span style={{ fontSize: 15.5, color: "var(--muted)", letterSpacing: "0.08em", lineHeight: 1.2, fontWeight: 300 }}>{data?.TODAY.dateLong ?? ""}</span>
-        <span className="mono uc" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--blue)", letterSpacing: "0.2em", flexShrink: 0 }}>
-          <span style={{ width: 5, height: 5, borderRadius: 999, background: "var(--blue)" }} />
+        <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "var(--muted)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+          <span style={{ width: 5, height: 5, borderRadius: 999, background: "var(--text)" }} />
           synced
         </span>
       </div>
     </header>
+  );
+}
+
+export function DateNavigator({
+  selectedDate,
+  onChange,
+  compact = false,
+}: {
+  selectedDate: string;
+  onChange: (date: string) => void;
+  compact?: boolean;
+}) {
+  const [showMonthGrid, setShowMonthGrid] = useState(false);
+  const calendarDialogRef = useRef<HTMLDivElement>(null);
+
+  // Close month calendar when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (calendarDialogRef.current && !calendarDialogRef.current.contains(event.target as Node)) {
+        setShowMonthGrid(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const weekStrip = useMemo(() => {
+    const centerDate = new Date(`${selectedDate}T12:00:00`);
+    const list = [];
+    const radius = compact ? 2 : 3;
+    for (let i = -radius; i <= radius; i++) {
+      const d = new Date(centerDate.getTime());
+      d.setDate(centerDate.getDate() + i);
+      const iso = localIsoDate(d);
+      const dayNum = d.getDate();
+      const dayName = d.toLocaleDateString("en-US", { weekday: "short" }).substring(0, 2).toUpperCase();
+      list.push({ iso, dayNum, dayName });
+    }
+    return list;
+  }, [compact, selectedDate]);
+
+  const year = useMemo(() => new Date(`${selectedDate}T12:00:00`).getFullYear(), [selectedDate]);
+  const month = useMemo(() => new Date(`${selectedDate}T12:00:00`).getMonth(), [selectedDate]);
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(year, month, 1);
+    const startDayOfWeek = firstDay.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    const result = [];
+
+    // Prepend previous month days
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, daysInPrevMonth - i);
+      result.push({ isoStr: localIsoDate(d), isCurrentMonth: false, dayNum: daysInPrevMonth - i });
+    }
+
+    // Add current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(year, month, i);
+      result.push({ isoStr: localIsoDate(d), isCurrentMonth: true, dayNum: i });
+    }
+
+    // Pad next month days to 42 cells
+    const padding = 42 - result.length;
+    for (let i = 1; i <= padding; i++) {
+      const d = new Date(year, month + 1, i);
+      result.push({ isoStr: localIsoDate(d), isCurrentMonth: false, dayNum: i });
+    }
+
+    return result;
+  }, [year, month]);
+
+  const shiftDate = (delta: number) => {
+    const d = new Date(`${selectedDate}T12:00:00`);
+    d.setDate(d.getDate() + delta);
+    onChange(localIsoDate(d));
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 16, position: "relative", maxWidth: "100%" }}>
+      {/* Week selector strip */}
+      <div style={{ display: "flex", alignItems: "center", gap: compact ? 4 : 8, border: "1px solid var(--text)", padding: compact ? "3px 6px" : "4px 8px", backgroundColor: "var(--bg)" }}>
+        <button
+          type="button"
+          onClick={() => shiftDate(-1)}
+          style={{ background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", padding: compact ? 1 : 2 }}
+        >
+          <ChevronLeft size={compact ? 12 : 14} />
+        </button>
+        
+        {weekStrip.map((day) => {
+          const isSelected = day.iso === selectedDate;
+          return (
+            <button
+              key={day.iso}
+              type="button"
+              onClick={() => onChange(day.iso)}
+              style={{
+                background: "none",
+                border: isSelected ? "1px solid var(--text)" : "1px solid transparent",
+                cursor: "pointer",
+                padding: compact ? "2px 4px" : "2px 6px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                minWidth: compact ? 28 : 32,
+                fontWeight: isSelected ? "bold" : "normal",
+                color: isSelected ? "var(--text)" : "var(--muted)",
+              }}
+            >
+              <span className="mono" style={{ fontSize: compact ? 7.5 : 8 }}>{day.dayName}</span>
+              <span style={{ fontSize: compact ? 11 : 12 }}>{day.dayNum}</span>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => shiftDate(1)}
+          style={{ background: "none", border: "none", cursor: "pointer", display: "grid", placeItems: "center", padding: compact ? 1 : 2 }}
+        >
+          <ChevronRight size={compact ? 12 : 14} />
+        </button>
+      </div>
+
+      {/* Calendar icon trigger */}
+      <button
+        type="button"
+        onClick={() => setShowMonthGrid(!showMonthGrid)}
+        style={{
+          width: compact ? 34 : 38,
+          height: compact ? 34 : 38,
+          border: "1px solid var(--text)",
+          background: showMonthGrid ? "var(--text)" : "var(--bg)",
+          color: showMonthGrid ? "var(--bg)" : "var(--text)",
+          cursor: "pointer",
+          display: "grid",
+          placeItems: "center"
+        }}
+        title="Select specific date"
+      >
+        <CalendarIcon size={compact ? 14 : 16} />
+      </button>
+
+      {/* Monthly grid calendar dropdown */}
+      {showMonthGrid && (
+        <div
+          ref={calendarDialogRef}
+          style={{
+            position: "absolute",
+            top: "46px",
+            right: 0,
+            width: 250,
+            border: "1px solid var(--text)",
+            backgroundColor: "var(--bg)",
+            padding: 16,
+            boxShadow: "4px 4px 0px var(--text)",
+            zIndex: 200
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span className="mono" style={{ fontSize: 11, fontWeight: "bold" }}>
+              {new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase()}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowMonthGrid(false)}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          
+          {/* Week headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center", marginBottom: 6 }}>
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
+              <span key={idx} className="mono" style={{ fontSize: 8.5, color: "var(--muted)", fontWeight: "bold" }}>{d}</span>
+            ))}
+          </div>
+
+          {/* Grid cells */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+            {calendarDays.map((cell, idx) => {
+              const isSelected = cell.isoStr === selectedDate;
+              const isCurrentMonth = cell.isCurrentMonth;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    onChange(cell.isoStr);
+                    setShowMonthGrid(false);
+                  }}
+                  style={{
+                    background: isSelected ? "var(--text)" : "none",
+                    color: isSelected ? "var(--bg)" : isCurrentMonth ? "var(--text)" : "var(--dim)",
+                    border: "none",
+                    cursor: "pointer",
+                    height: 24,
+                    fontSize: 11,
+                    display: "grid",
+                    placeItems: "center",
+                    fontWeight: isSelected ? "bold" : "normal"
+                  }}
+                >
+                  {cell.dayNum}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -717,17 +945,17 @@ function NextTaskCard({ data, onToggleTask }: { data: DashData; onToggleTask: (t
     <div
       style={{
         padding: "22px 24px",
-        borderRadius: 14,
-        background: "linear-gradient(180deg, rgba(36,84,214,0.04), rgba(36,84,214,0.0))",
-        border: "1px solid rgba(223,208,184,0.35)",
+        borderRadius: 20,
+        background: "linear-gradient(145deg, rgba(180,100,100,0.07), rgba(255,250,240,0))",
+        border: "1.5px solid rgba(178,68,68,0.12)",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
         gap: 10,
       }}
     >
-      <div className="mono uc" style={{ fontSize: 10, color: "var(--rose)", letterSpacing: "0.22em" }}>
-        Next Task Focus
+      <div className="mono" style={{ fontSize: 10, color: "var(--rose)", letterSpacing: "0.08em", textTransform: "none", opacity: 0.8 }}>
+        ↳ focus
       </div>
       {nextTask ? (
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
@@ -794,17 +1022,17 @@ function NextEventCard({ data }: { data: DashData }) {
     <div
       style={{
         padding: "22px 24px",
-        borderRadius: 14,
-        background: "linear-gradient(180deg, rgba(36,84,214,0.04), rgba(36,84,214,0.0))",
-        border: "1px solid rgba(223,208,184,0.35)",
+        borderRadius: 20,
+        background: "linear-gradient(145deg, rgba(36,84,214,0.06), rgba(255,250,240,0))",
+        border: "1.5px solid rgba(36,84,214,0.1)",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
         gap: 10,
       }}
     >
-      <div className="mono uc" style={{ fontSize: 10, color: "var(--blue)", letterSpacing: "0.22em" }}>
-        Next / Current Event
+      <div className="mono" style={{ fontSize: 10, color: "var(--blue)", letterSpacing: "0.08em", textTransform: "none", opacity: 0.8 }}>
+        ↳ up next
       </div>
       {nextEvent ? (
         <div>
@@ -858,177 +1086,7 @@ function NextEventCard({ data }: { data: DashData }) {
   );
 }
 
-function VisionMoment({ data }: { data: DashData }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [visionText, setVisionText] = useState(data.VISION_LINE);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch("/api/lifeswork/vision", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: visionText }),
-      });
-      if (res.ok) {
-        setIsEditing(false);
-        window.location.reload();
-      }
-    } catch (e) {
-      console.error("Failed to save vision:", e);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        padding: "18px 40px 22px",
-        background: "radial-gradient(ellipse at 50% 45%, rgba(36,84,214,0.06), transparent 58%)",
-        textAlign: "center",
-      }}
-    >
-      <div 
-        className="mono uc" 
-        style={{ 
-          fontSize: 11, 
-          color: "var(--rose)", 
-          letterSpacing: "0.28em", 
-          marginBottom: 8,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-        }}
-      >
-        <span>Vision · long arc</span>
-        {!isEditing && (
-          <button
-            type="button"
-            onClick={() => setIsEditing(true)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--rose)",
-              opacity: isHovered ? 0.7 : 0,
-              transition: "opacity 0.15s, color 0.15s",
-              padding: 2,
-              display: "flex",
-              alignItems: "center",
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.color = "var(--blue)")}
-            onMouseOut={(e) => (e.currentTarget.style.color = "var(--rose)")}
-            title="Edit Vision"
-          >
-            <Pencil size={11} />
-          </button>
-        )}
-      </div>
-      
-      {isEditing ? (
-        <div style={{ maxWidth: 880, margin: "0 auto" }}>
-          <textarea
-            value={visionText}
-            onChange={(e) => setVisionText(e.target.value)}
-            disabled={isSaving}
-            style={{
-              width: "100%",
-              minHeight: "60px",
-              padding: "10px 14px",
-              background: "var(--bg)",
-              border: "1px solid var(--blue)",
-              borderRadius: "6px",
-              color: "var(--text)",
-              fontSize: "20px",
-              fontFamily: "var(--mono)",
-              textAlign: "center",
-              outline: "none",
-              resize: "vertical",
-              boxShadow: "0 0 0 2px rgba(36, 84, 214, 0.15)",
-              margin: "6px auto 10px",
-              display: "block",
-            }}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
-          />
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              style={{
-                padding: "4px 14px",
-                fontSize: "10px",
-                fontFamily: "var(--mono)",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                background: "var(--blue)",
-                color: "#fffaf0",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              {isSaving ? "Saving..." : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setVisionText(data.VISION_LINE);
-                setIsEditing(false);
-              }}
-              disabled={isSaving}
-              style={{
-                padding: "4px 14px",
-                fontSize: "10px",
-                fontFamily: "var(--mono)",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                background: "transparent",
-                color: "var(--muted)",
-                border: "1px solid var(--line)",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div 
-          className="mono" 
-          onDoubleClick={() => setIsEditing(true)}
-          style={{ 
-            fontSize: 22, 
-            lineHeight: 1.45, 
-            color: "var(--text)", 
-            fontWeight: 300, 
-            letterSpacing: "0.02em", 
-            textWrap: "balance", 
-            maxWidth: 880, 
-            margin: "0 auto",
-            cursor: "pointer",
-          }}
-          title="Double click to edit"
-        >
-          &quot;{data.VISION_LINE}&quot;
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ShapeOfDay({ data }: { data: DashData }) {
   const buckets = useMemo(() => {
@@ -1142,47 +1200,176 @@ function NowCard({ data }: { data: DashData }) {
 }
 
 function Breathe({ style }: { style?: React.CSSProperties }) {
+  const [time, setTime] = useState<number>(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTime((prev) => (prev + 100) % 12000);
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Determine state name and subtitle
+  let breatheState = "Inhale (Inner)";
+  if (time >= 4000 && time < 5000) {
+    breatheState = "Hold (Stop)";
+  } else if (time >= 5000 && time < 8000) {
+    breatheState = "Inhale (Outer)";
+  } else if (time >= 8000) {
+    breatheState = "Release";
+  }
+
+  let innerFill = 0;
+  let outerFill = 0;
+
+  if (time < 4000) {
+    innerFill = time / 4000;
+    outerFill = 0;
+  } else if (time >= 4000 && time < 5000) {
+    innerFill = 1;
+    outerFill = 0;
+  } else if (time >= 5000 && time < 8000) {
+    innerFill = 1;
+    outerFill = (time - 5000) / 3000;
+  } else {
+    const releaseProgress = (time - 8000) / 4000;
+    innerFill = 1 - releaseProgress;
+    outerFill = 1 - releaseProgress;
+  }
+
+  const outerFillScale = 0.46 + outerFill * 0.54;
+  const orbGlow = 0.08 + Math.max(innerFill, outerFill) * 0.18;
+
   return (
     <div
+      className="grid-card"
       style={{
-        padding: "16px 18px",
-        border: "1px solid rgba(223,208,184,0.35)",
-        borderRadius: 14,
+        padding: "26px 28px",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "space-between",
         gap: 12,
-        background: "linear-gradient(180deg, rgba(36,84,214,0.04), transparent)",
+        width: "100%",
+        minHeight: 150,
         ...style,
       }}
     >
-      <style>{`
-        @keyframes sigh { 0% { transform: scale(0.45); opacity: 0.55; } 35% { transform: scale(0.82); opacity: 0.92; } 42% { transform: scale(0.82); opacity: 0.92; } 55% { transform: scale(1); opacity: 1; } 95%,100% { transform: scale(0.45); opacity: 0.55; } }
-        .breath-dot { animation: sigh 10s cubic-bezier(.5,.05,.5,.95) infinite; transform-origin: center; }
-        @keyframes ph-in1 { 0%,35% { opacity: 1; } 40%,100% { opacity: 0; } }
-        @keyframes ph-in2 { 0%,42% { opacity: 0; } 47%,55% { opacity: 1; } 60%,100% { opacity: 0; } }
-        @keyframes ph-out { 0%,57% { opacity: 0; } 62%,95% { opacity: 1; } 100% { opacity: 0; } }
-        .ph { position: absolute; inset: 0; display: grid; place-items: center; }
-        .ph-1 { animation: ph-in1 10s cubic-bezier(.5,.05,.5,.95) infinite; }
-        .ph-2 { animation: ph-in2 10s cubic-bezier(.5,.05,.5,.95) infinite; }
-        .ph-3 { animation: ph-out 10s cubic-bezier(.5,.05,.5,.95) infinite; }
-      `}</style>
-      <div className="mono uc" style={{ fontSize: 10, color: "var(--blue)", letterSpacing: "0.28em" }}>Breathe</div>
-      <div style={{ width: 60, height: 60, display: "grid", placeItems: "center" }}>
-        <div className="breath-dot" style={{ width: 48, height: 48, borderRadius: 999, background: "radial-gradient(circle, rgba(36,84,214,0.40), rgba(36,84,214,0.04) 70%)", boxShadow: "0 0 20px rgba(36,84,214,0.12)" }} />
+      <div className="zine-paperclip" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div className="zine-eyebrow">
+          <span>↳ breathe & execute</span>
+          <span>04</span>
+        </div>
+        <div className="mono" style={{ fontSize: 13, fontWeight: 900, textTransform: "uppercase", marginTop: 4 }}>
+          {breatheState}
+        </div>
+        <div className="mono" style={{ fontSize: 7.5, color: "var(--muted)", whiteSpace: "nowrap" }}>
+          4s Inhale · 1s Hold · 3s Inhale · 4s Out
+        </div>
       </div>
-      <div style={{ position: "relative", height: 18, width: "100%" }}>
-        <div className="ph ph-1 mono uc" style={{ fontSize: 10, color: "var(--text)", letterSpacing: "0.18em" }}>Inhale ·····</div>
-        <div className="ph ph-2 mono uc" style={{ fontSize: 10, color: "var(--text)", letterSpacing: "0.18em" }}>Top up</div>
-        <div className="ph ph-3 mono uc" style={{ fontSize: 10, color: "var(--text)", letterSpacing: "0.18em" }}>Release ··········</div>
-      </div>
-      <div className="mono" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: "0.04em", textAlign: "center", lineHeight: 1.35 }}>
-        2 in (nose) · 1 long out (mouth) · 3x
+
+      <div style={{ position: "relative", width: 68, height: 68, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        <div
+          style={{
+            position: "absolute",
+            width: 56,
+            height: 14,
+            bottom: 5,
+            left: 6,
+            borderRadius: 999,
+            background: "rgba(0,0,0,0.14)",
+            filter: "blur(8px)",
+            transform: `scale(${0.84 + outerFill * 0.12})`,
+            opacity: 0.34,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            width: 58,
+            height: 58,
+            borderRadius: 999,
+            border: "1.5px solid rgba(12,12,14,0.9)",
+            background: "radial-gradient(circle at 34% 28%, #ffffff 0%, #edf8ff 18%, #d7edf8 44%, #a7c6d8 100%)",
+            boxShadow: `inset 8px 9px 12px rgba(255,255,255,0.86), inset -10px -12px 16px rgba(18,52,70,0.24), 4px 6px 0 rgba(0,0,0,0.86), 0 0 18px rgba(125,211,252,${orbGlow})`,
+            display: "grid",
+            placeItems: "center",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              width: 58,
+              height: 58,
+              borderRadius: 999,
+              background: "radial-gradient(circle at 36% 30%, rgba(255,255,255,0.95), rgba(125,211,252,0.72) 34%, rgba(29,78,116,0.72) 100%)",
+              opacity: 0.2 + outerFill * 0.78,
+              transform: `scale(${outerFillScale})`,
+              transformOrigin: "center",
+              transition: "opacity 0.1s linear, transform 0.1s linear",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 7,
+              borderRadius: 999,
+              border: "1px dashed rgba(12,12,14,0.32)",
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: "1.25px solid rgba(12,12,14,0.72)",
+              background: "radial-gradient(circle at 35% 28%, #ffffff 0%, #f8fdff 32%, #d8e8f0 100%)",
+              boxShadow: "inset 4px 5px 7px rgba(255,255,255,0.84), inset -5px -7px 9px rgba(18,52,70,0.22), 0 2px 6px rgba(0,0,0,0.18)",
+              display: "grid",
+              placeItems: "center",
+              zIndex: 3,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                width: 28,
+                height: 28,
+                borderRadius: 999,
+                background: "radial-gradient(circle at 34% 28%, #ffffff 0%, #8ed8ff 38%, #1f5d8e 100%)",
+                opacity: 0.18 + innerFill * 0.82,
+                transform: `scale(${innerFill})`,
+                transformOrigin: "center",
+                transition: "opacity 0.1s linear, transform 0.1s linear",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              width: 14,
+              height: 14,
+              top: 11,
+              left: 14,
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.7)",
+              filter: "blur(3px)",
+              opacity: 0.54,
+              pointerEvents: "none",
+              zIndex: 4,
+            }}
+          />
+        </div>
       </div>
     </div>
   );
 }
+
 
 export function DeleteBtn({ onClick, label }: { onClick: () => void; label: string }) {
   return (
@@ -1454,7 +1641,6 @@ export function DayTimeline({ blocks, tasks, nowMin, isToday }: { blocks: DashBl
       {blocks.length === 0 && (
         <div style={{ position: "absolute", top: "40%", left: LABEL_W + 14, right: 0, textAlign: "center" }}>
           <div className="mono uc" style={{ fontSize: 11, color: "var(--dim)", letterSpacing: "0.2em" }}>No events</div>
-          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Send time blocks via Telegram, e.g. "6-7 gym"</div>
         </div>
       )}
     </div>
@@ -1540,17 +1726,17 @@ function ActiveProblems({ data, onSolve }: { data: DashData; onSolve: (id: strin
     <div
       style={{
         padding: "22px 24px",
-        border: "1px solid rgba(223,208,184,0.35)",
-        borderRadius: 14,
-        background: "linear-gradient(180deg, rgba(36,84,214,0.04), transparent)",
+        border: "1.5px solid rgba(194,120,50,0.13)",
+        borderRadius: 20,
+        background: "linear-gradient(145deg, rgba(196,126,34,0.06), transparent)",
         display: "flex",
         flexDirection: "column",
         gap: 14,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span className="mono uc" style={{ fontSize: 11, color: "var(--blue)", letterSpacing: "0.22em", fontWeight: 600 }}>
-          Active Problems
+        <span className="mono" style={{ fontSize: 11, color: "var(--amber)", letterSpacing: "0.06em", fontWeight: 600 }}>
+          open problems
         </span>
         <Link
           href="/lifeswork?section=problems"
@@ -1584,17 +1770,469 @@ function ActiveProblems({ data, onSolve }: { data: DashData; onSolve: (id: strin
   );
 }
 
-export function CockpitPage() {
-  const data = useDashData();
+function VisionBoard({ line }: { line: string }) {
+  const visionItems = [
+    { title: "✦ MONEY", text: "Nothing too expensive. Enough to never think about cost." },
+    { title: "✦ WORK", text: "Exciting work. Excited on a Monday morning." },
+    { title: "✦ PEOPLE", text: "People I admire, grow with. A small, tight circle." },
+    { title: "✦ LIFE", text: "Travel. Rich experiences, and absolute freedom." }
+  ];
 
-  const toggleTask = useCallback(async (task: DashTask) => {
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done: !task.done }),
-    });
-    window.location.reload();
-  }, []);
+  return (
+    <div
+      className="grid-card"
+      style={{
+        padding: "24px 26px 24px",
+        height: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        overflow: "visible",
+      }}
+    >
+      <div className="zine-paperclip" />
+      <div className="zine-eyebrow">
+        <span>↳ my vision statement</span>
+        <span>01</span>
+      </div>
+      <div
+        style={{
+          borderLeft: "6px solid #000000",
+          paddingLeft: 12,
+          fontSize: 18,
+          lineHeight: 1.3,
+          fontWeight: 900,
+          letterSpacing: 0,
+          maxWidth: 660,
+          textTransform: "uppercase",
+        }}
+      >
+        "{line}"
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, rowGap: 14 }}>
+        {visionItems.map((v, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span className="mono" style={{ fontSize: 13, color: "#000000", fontWeight: 900 }}>{v.title}</span>
+            <span style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.25 }}>{v.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TodayScheduleCard({ data }: { data: DashData }) {
+  const todayBlocks = useMemo(() => {
+    return [...data.BLOCKS].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+  }, [data.BLOCKS]);
+
+  return (
+    <div
+      className="grid-card"
+      style={{
+        padding: "24px 28px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 18,
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+      }}
+    >
+      <div className="zine-paperclip" />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexShrink: 0 }}>
+        <div className="zine-eyebrow blue">
+          <span>↳ today's schedule</span>
+          <span>03</span>
+        </div>
+        <Link
+          href="/calendar"
+          className="mono"
+          style={{
+            fontSize: 15,
+            color: "var(--text)",
+            textDecoration: "underline",
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            display: "inline-block"
+          }}
+        >
+          full view →
+        </Link>
+      </div>
+
+      <div className="timeline-container" style={{ position: "relative", paddingLeft: 14, flex: 1, display: "flex", flexDirection: "column", justifyContent: todayBlocks.length === 0 ? "center" : "flex-start" }}>
+        <div className="timeline-line" style={{ position: "absolute", left: 4, top: 4, bottom: 4, width: 1, borderLeft: "1px dashed var(--line)" }} />
+
+        <div className="timeline-list" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {todayBlocks.length === 0 ? (
+            <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "8px 0", textAlign: "center" }}>
+              no events scheduled
+            </div>
+          ) : (
+            todayBlocks.map((b, idx) => {
+              const startMin = toMinutes(b.start);
+              const endMin = toMinutes(b.end);
+              const isCurrent = data.NOW_MIN >= startMin && data.NOW_MIN <= endMin;
+
+              return (
+                <div 
+                  key={idx} 
+                  style={{ 
+                    display: "flex", 
+                    gap: 12, 
+                    fontSize: 12,
+                    padding: isCurrent ? "2px 6px" : "0",
+                    background: isCurrent ? "#ccfbf1" : "transparent",
+                    border: isCurrent ? "1px solid #000000" : "none",
+                    fontWeight: isCurrent ? 700 : 400
+                  }}
+                >
+                  <div className="mono" style={{ fontSize: 10, color: isCurrent ? "var(--text)" : "var(--muted)", width: 38, flexShrink: 0 }}>
+                    {b.start}
+                  </div>
+                  <div style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "baseline", minWidth: 0 }}>
+                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                      {b.label}
+                    </span>
+                    {b.cat && (
+                      <span 
+                        className="mono" 
+                        style={{ 
+                          fontSize: 8, 
+                          padding: "1px 4px", 
+                          border: "1px solid var(--line)",
+                          color: "var(--muted)",
+                          flexShrink: 0,
+                          background: "#ffffff",
+                          marginLeft: 8
+                        }}
+                      >
+                        {b.cat}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuotesDeck({ 
+  quotes, 
+  onAddQuote, 
+  onDeleteQuote 
+}: { 
+  quotes: QuoteRow[]; 
+  onAddQuote: (text: string, author?: string) => Promise<void>; 
+  onDeleteQuote: (id: string) => Promise<void>; 
+}) {
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [text, setText] = useState("");
+  const [author, setAuthor] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  // Form styles locally scoped for clean minimalist input fields
+  const localInputStyle = {
+    background: "var(--bg-2)",
+    border: "1px solid var(--line)",
+    borderRadius: "6px",
+    color: "var(--text)",
+    fontSize: "13px",
+    padding: "8px 12px",
+    outline: "none",
+    width: "100%",
+    fontFamily: "inherit",
+  };
+
+  const handleCycleQuote = () => {
+    if (quotes.length === 0) return;
+    setQuoteIndex((prev) => (prev + 1) % quotes.length);
+  };
+
+  const handleDeleteActive = async () => {
+    if (quotes.length === 0) return;
+    const activeQuote = quotes[quoteIndex];
+    if (confirm("Are you sure you want to delete this quote?")) {
+      await onDeleteQuote(activeQuote.id);
+      setQuoteIndex((prev) => (quotes.length <= 1 ? 0 : prev % (quotes.length - 1)));
+    }
+  };
+
+  const handleAddSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!text.trim() || adding) return;
+    setAdding(true);
+    try {
+      await onAddQuote(text.trim(), author.trim() || undefined);
+      setText("");
+      setAuthor("");
+      setShowForm(false);
+      setQuoteIndex(0);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (quotes.length === 0) {
+    return (
+      <div className="grid-card" style={{ padding: "24px 24px", display: "flex", flexDirection: "column", gap: 24, width: "100%", minHeight: 340, justifyContent: "flex-start" }}>
+        <div className="zine-paperclip" />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+          <div className="zine-eyebrow blue">
+            <span>↳ mind space / quotes</span>
+            <span>06</span>
+          </div>
+          <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>{quotes.length} items</span>
+        </div>
+        <div className="mono" style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", padding: "44px 0" }}>
+          No thoughts saved.
+        </div>
+        {showForm ? (
+          <form onSubmit={handleAddSubmit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input
+              type="text"
+              placeholder="Thought/Quote"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              required
+              style={localInputStyle}
+            />
+            <input
+              type="text"
+              placeholder="Author (Optional)"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              style={localInputStyle}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="submit" disabled={adding} className="mono" style={{ flex: 1, background: "#0c0c0e", color: "#faf9f6", fontSize: 9, padding: "6px 10px", border: "none", cursor: "pointer" }}>
+                {adding ? "saving..." : "save"}
+              </button>
+              <button type="button" onClick={() => setShowForm(false)} className="mono" style={{ background: "none", border: "1px solid #0c0c0e", color: "#0c0c0e", fontSize: 9, padding: "6px 10px", cursor: "pointer" }}>
+                cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button onClick={() => setShowForm(true)} className="mono" style={{ background: "#0c0c0e", color: "#faf9f6", border: "none", padding: "8px 12px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer" }}>
+            + Add Thought
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="grid-card"
+      style={{
+        padding: "24px 24px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 24,
+        width: "100%",
+        minHeight: 390,
+        justifyContent: "flex-start"
+      }}
+    >
+      <div className="zine-paperclip" />
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+          <div className="zine-eyebrow blue">
+            <span>↳ mind space / quotes</span>
+            <span>06</span>
+          </div>
+          <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>{quotes.length} items</span>
+        </div>
+      </div>
+
+      {!showForm ? (
+        <>
+          {/* Stack container */}
+          <div
+            onClick={handleCycleQuote}
+            style={{
+              position: "relative",
+              width: "100%",
+              height: 190,
+              cursor: "pointer",
+              margin: "4px 0 8px"
+            }}
+          >
+            {quotes.map((q, idx) => {
+              const len = quotes.length;
+              const relativePos = (idx - quoteIndex + len) % len;
+
+              let transform = "";
+              let opacity = 0;
+              let zIndex = 0;
+
+              if (relativePos === 0) {
+                transform = "translate3d(0px, 0px, 0px) scale(1) rotate(0deg)";
+                opacity = 1;
+                zIndex = 10;
+              } else if (relativePos === 1) {
+                transform = "translate3d(6px, 8px, -10px) scale(0.97) rotate(1deg)";
+                opacity = 0.8;
+                zIndex = 9;
+              } else if (relativePos === 2) {
+                transform = "translate3d(12px, 16px, -20px) scale(0.94) rotate(-1.5deg)";
+                opacity = 0.5;
+                zIndex = 8;
+              } else {
+                transform = "translate3d(18px, 24px, -30px) scale(0.91) rotate(0deg)";
+                opacity = 0;
+                zIndex = 1;
+              }
+
+              return (
+                <div
+                  key={q.id}
+                  className="deck-card"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 14,
+                    bottom: 20,
+                    border: "1px solid #0c0c0e",
+                    backgroundColor: "#ffffff",
+                    padding: "24px 26px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    transform,
+                    opacity,
+                    zIndex,
+                    pointerEvents: relativePos === 0 ? "auto" : "none"
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontStyle: "italic",
+                      lineHeight: 1.35,
+                      color: "#0c0c0e",
+                      textWrap: "pretty"
+                    }}
+                  >
+                    “{q.text}”
+                  </div>
+                  
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 }}>
+                    <span className="mono" style={{ fontSize: 9, color: "#66666a" }}>
+                      — {q.author || "anon"}
+                    </span>
+                    <span className="mono" style={{ fontSize: 8, color: "#d1d1d4" }}>
+                      {idx + 1}/{len}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bottom deck actions helper */}
+          <div style={{ display: "flex", gap: 12 }}>
+            <button
+              onClick={handleCycleQuote}
+              className="mono"
+              style={{
+                flex: 1,
+                background: "#0c0c0e",
+                color: "#faf9f6",
+                border: "none",
+                padding: "8px 12px",
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 4
+              }}
+            >
+              <span>Next Quote</span>
+            </button>
+            <button
+              onClick={handleDeleteActive}
+              className="mono"
+              style={{
+                background: "none",
+                border: "1px solid #ef4444",
+                color: "#ef4444",
+                padding: "8px 12px",
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                cursor: "pointer"
+              }}
+            >
+              delete
+            </button>
+            <button
+              onClick={() => setShowForm(true)}
+              className="mono"
+              style={{
+                background: "none",
+                border: "1px solid #0c0c0e",
+                color: "#0c0c0e",
+                padding: "8px 12px",
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                cursor: "pointer"
+              }}
+            >
+              + add
+            </button>
+          </div>
+        </>
+      ) : (
+        <form onSubmit={handleAddSubmit} style={{ display: "flex", flexDirection: "column", gap: 10, margin: "10px 0" }}>
+          <div className="mono" style={{ fontSize: 9.5, color: "#0c0c0e" }}>New Thought</div>
+          <textarea
+            placeholder="What is on your mind?"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            required
+            rows={3}
+            style={{ ...localInputStyle, resize: "none", fontSize: "13px", padding: "8px" }}
+          />
+          <input
+            type="text"
+            placeholder="Author (Optional)"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            style={{ ...localInputStyle, fontSize: "13px", padding: "8px" }}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="submit" disabled={adding} className="mono" style={{ flex: 1, background: "#0c0c0e", color: "#faf9f6", fontSize: 9, padding: "8px 12px", border: "none", cursor: "pointer" }}>
+              {adding ? "saving..." : "save"}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="mono" style={{ background: "none", border: "1px solid #0c0c0e", color: "#0c0c0e", fontSize: 9, padding: "8px 12px", cursor: "pointer" }}>
+              cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+export function CockpitPage() {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [newProblem, setNewProblem] = useState("");
+  const data = useDashData(undefined, refreshTrigger);
 
   const solveProblem = useCallback(async (id: string) => {
     await fetch(`/api/problems/${id}`, {
@@ -1602,34 +2240,198 @@ export function CockpitPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ solved: true }),
     });
-    window.location.reload();
+    setRefreshTrigger((prev) => prev + 1);
   }, []);
 
-  const deleteTask = useCallback(async (task: DashTask) => {
-    await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
-    window.location.reload();
+  const addProblem = useCallback(async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newProblem.trim()) return;
+    await fetch("/api/problems", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: newProblem.trim() }),
+    });
+    setNewProblem("");
+    setRefreshTrigger((prev) => prev + 1);
+  }, [newProblem]);
+
+  const addQuote = useCallback(async (text: string, author?: string) => {
+    await fetch("/api/quotes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, author }),
+    });
+    setRefreshTrigger((prev) => prev + 1);
+  }, []);
+
+  const deleteQuote = useCallback(async (id: string) => {
+    await fetch("/api/quotes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setRefreshTrigger((prev) => prev + 1);
   }, []);
 
   if (!data) return <LoadingPage />;
 
+  const activeTask = data.TASKS.find(t => !t.done);
+  const activeProblems = data.PROBLEMS.filter(p => !p.solved);
+
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <PageHeader active="cockpit" data={data} />
-      <VisionMoment data={data} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 20, padding: "20px 40px 40px", flex: 1, alignContent: "start" }}>
-        {/* Left Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <NextTaskCard data={data} onToggleTask={toggleTask} />
-          <ActiveProblems data={data} onSolve={solveProblem} />
-        </div>
+      <main style={{ flex: 1, minHeight: 0, padding: "32px 32px 40px", boxSizing: "border-box" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1.15fr) minmax(0, 1.05fr)",
+            gap: 32,
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          {/* COLUMN 1: VISION, FOCUS TARGET & BREATHE */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%", minHeight: 0 }}>
+            {/* Vision Board */}
+            <div style={{ flex: "0 0 auto", overflow: "visible" }}>
+              <VisionBoard line={data.VISION_LINE} />
+            </div>
 
-        {/* Right Column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <NextEventCard data={data} />
-          <Breathe />
+            {/* Focus Target Card */}
+            <div
+              className="grid-card"
+              style={{
+                padding: "26px 30px",
+                display: "flex",
+                alignItems: "center",
+                gap: 22,
+                minHeight: 140,
+                flexShrink: 0,
+              }}
+            >
+              <div className="zine-paperclip" />
+              <div
+                style={{
+                  width: 30,
+                  height: 30,
+                  border: "1.5px solid #0c0c0e",
+                  borderRadius: 999,
+                  display: "grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <ArrowDown size={14} />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="zine-eyebrow blue" style={{ marginBottom: 6 }}>
+                  <span>↳ focus target</span>
+                  <span>02</span>
+                </div>
+                {activeTask ? (
+                  <>
+                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {activeTask.title}
+                    </div>
+                    <div className="mono" style={{ fontSize: 8.5, color: "#66666a", marginTop: 3 }}>
+                      weight: <span style={{ fontWeight: 600, color: "#0c0c0e" }}>{weightForTask(activeTask.title)}</span> · due {activeTask.due || "today"}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>
+                    No active focus targets
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Breathe widget */}
+            <Breathe style={{ flexShrink: 0 }} />
+          </div>
+
+          {/* COLUMN 2: SCHEDULE & PROBLEMS */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 32, height: "100%", minHeight: 0, overflow: "hidden" }}>
+            {/* Today's Schedule */}
+            <div style={{ flex: "0 0 330px", minHeight: 0, overflow: "hidden" }}>
+              <TodayScheduleCard data={data} />
+            </div>
+
+            {/* Open Problem Space */}
+            <div className="grid-card" style={{ flex: 1, minHeight: 0, padding: "24px 28px", display: "flex", flexDirection: "column", gap: 22 }}>
+              <div className="zine-paperclip" />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexShrink: 0 }}>
+                <div className="zine-eyebrow">
+                  <span>↳ open problem space</span>
+                  <span>05</span>
+                </div>
+                <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>{activeProblems.length} items</span>
+              </div>
+
+              {/* Add-problem input */}
+              <form onSubmit={addProblem} style={{ flexShrink: 0, border: "2px solid #000000", background: "#ffffff", padding: "10px 14px" }}>
+                <input
+                  type="text"
+                  placeholder="Log new bottleneck + Hit Enter..."
+                  value={newProblem}
+                  onChange={(e) => setNewProblem(e.target.value)}
+                  style={{ border: "none", outline: "none", fontSize: 15, width: "100%", background: "transparent", color: "var(--text)", fontFamily: "inherit" }}
+                />
+              </form>
+
+              {/* Problems list */}
+              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", flex: 1 }}>
+                {activeProblems.length === 0 ? (
+                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "8px 0", textAlign: "center" }}>
+                    all problems solved
+                  </div>
+                ) : (
+                  activeProblems.map((p) => (
+                    <div
+                      key={p.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "9px 0",
+                        borderBottom: "1px dashed #000000",
+                        fontSize: 12.5,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <button
+                        onClick={() => solveProblem(p.id)}
+                        title="Mark solved"
+                        style={{
+                          width: 16,
+                          height: 16,
+                          border: "2px solid #000000",
+                          background: "none",
+                          cursor: "pointer",
+                          flexShrink: 0,
+                          padding: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>{p.text}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* COLUMN 3: QUOTES DECK */}
+          <div style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <QuotesDeck
+              quotes={data.QUOTES}
+              onAddQuote={addQuote}
+              onDeleteQuote={deleteQuote}
+            />
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -1685,7 +2487,14 @@ export function ActivitiesPage() {
 
 export function FoodSpendingPage() {
   const [date, setDate] = useState(() => localIsoDate());
-  const data = useDashData(date);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const data = useDashData(date, refreshTrigger, {
+    includeLearnings: false,
+    includeTasks: false,
+    includeCalendar: false,
+    includeProblems: false,
+    includeQuotes: false,
+  });
   const [showAllSpend, setShowAllSpend] = useState(false);
   const [showAllFood, setShowAllFood] = useState(false);
   const [viewDate, setViewDate] = useState(() => new Date(date));
@@ -1697,6 +2506,13 @@ export function FoodSpendingPage() {
   const [category, setCategory] = useState("Other");
   const [time, setTime] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showAddFoodForm, setShowAddFoodForm] = useState(false);
+  const [foodLabel, setFoodLabel] = useState("");
+  const [foodKcal, setFoodKcal] = useState("");
+  const [foodProtein, setFoodProtein] = useState("");
+  const [foodCost, setFoodCost] = useState("");
+  const [foodMeal, setFoodMeal] = useState("lunch");
+  const [foodLoading, setFoodLoading] = useState(false);
 
   // Sync calendar view when date changes
   useEffect(() => {
@@ -1705,7 +2521,7 @@ export function FoodSpendingPage() {
 
   // Set default current time when opening the form
   useEffect(() => {
-    if (showAddForm) {
+    if (showAddForm || showAddFoodForm) {
       try {
         const timeStr = new Intl.DateTimeFormat("en-US", {
           timeZone: "Asia/Kolkata",
@@ -1718,9 +2534,9 @@ export function FoodSpendingPage() {
         setTime("12:00");
       }
     }
-  }, [showAddForm]);
+  }, [showAddForm, showAddFoodForm]);
 
-  const handleAddSpend = useCallback(async (e: React.FormEvent) => {
+  const handleAddSpend = useCallback(async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!item.trim() || !amount) return;
 
@@ -1746,7 +2562,7 @@ export function FoodSpendingPage() {
         setAmount("");
         setCategory("Other");
         setShowAddForm(false);
-        window.location.reload();
+        setRefreshTrigger((prev) => prev + 1);
       } else {
         const errorText = await res.text();
         alert(`Error adding spending: ${errorText}`);
@@ -1757,7 +2573,51 @@ export function FoodSpendingPage() {
     } finally {
       setLoading(false);
     }
-  }, [date, item, amount, category, time]);
+  }, [date, item, amount, category, time, setRefreshTrigger]);
+
+  const handleAddFood = useCallback(async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!foodLabel.trim()) return;
+
+    setFoodLoading(true);
+    try {
+      const res = await fetch("/api/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          type: "food",
+          data: {
+            name: foodLabel.trim(),
+            calories: foodKcal ? parseFloat(foodKcal) : 0,
+            protein_g: foodProtein ? parseFloat(foodProtein) : 0,
+            cost: foodCost ? parseFloat(foodCost) : 0,
+            meal: foodMeal,
+            estimated: false,
+            time: time || new Date().toTimeString().slice(0, 5),
+          },
+        }),
+      });
+
+      if (res.ok) {
+        setFoodLabel("");
+        setFoodKcal("");
+        setFoodProtein("");
+        setFoodCost("");
+        setFoodMeal("lunch");
+        setShowAddFoodForm(false);
+        setRefreshTrigger((prev) => prev + 1);
+      } else {
+        const errorText = await res.text();
+        alert(`Error adding food: ${errorText}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to add food entry");
+    } finally {
+      setFoodLoading(false);
+    }
+  }, [date, foodCost, foodKcal, foodLabel, foodMeal, foodProtein, time, setRefreshTrigger]);
 
   const deleteMeal = useCallback(async (m: DashData["MEALS"][number]) => {
     await fetch("/api/daily", {
@@ -1765,8 +2625,8 @@ export function FoodSpendingPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "food", id: m.id }),
     });
-    window.location.reload();
-  }, []);
+    setRefreshTrigger((prev) => prev + 1);
+  }, [setRefreshTrigger]);
 
   const deleteSpend = useCallback(async (s: DashData["SPEND"][number]) => {
     await fetch("/api/daily", {
@@ -1774,8 +2634,8 @@ export function FoodSpendingPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "spending", id: s.id }),
     });
-    window.location.reload();
-  }, []);
+    setRefreshTrigger((prev) => prev + 1);
+  }, [setRefreshTrigger]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -1835,45 +2695,60 @@ export function FoodSpendingPage() {
     return result;
   }, [year, month]);
 
+  const compactInputStyle: React.CSSProperties = {
+    padding: "8px 10px",
+    border: "2px solid #000",
+    borderRadius: 0,
+    background: "var(--bg)",
+    color: "var(--text)",
+    fontSize: 13,
+    fontFamily: "inherit",
+    outline: "none",
+    width: "100%",
+  };
+
+  const compactButtonStyle: React.CSSProperties = {
+    background: "#0c0c0e",
+    color: "#fff",
+    border: "2px solid #000",
+    borderRadius: 0,
+    padding: "8px 14px",
+    cursor: foodLoading ? "not-allowed" : "pointer",
+    fontFamily: "var(--mono)",
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    opacity: foodLoading ? 0.7 : 1,
+  };
+
   if (!data) return <LoadingPage />;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
       <PageHeader active="food" data={data} />
       
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", flex: 1 }}>
-        {/* Left Panel: Spending and Food */}
-        <div style={{ padding: "32px 40px", display: "flex", flexDirection: "column", gap: 38, borderRight: `1px solid ${BROWN_LINE}` }}>
-          {/* Header showing selected date */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${BROWN_LINE}`, paddingBottom: 16 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 300, color: "var(--text)" }}>
-              {data.TODAY.dateLong}
-            </h1>
-            {date !== localIsoDate() && (
-              <button
-                type="button"
-                onClick={() => setDate(localIsoDate())}
-                style={{
-                  background: "none",
-                  border: "1px solid var(--blue)",
-                  color: "var(--blue)",
-                  padding: "4px 10px",
-                  cursor: "pointer",
-                  fontFamily: "var(--mono)",
-                  fontSize: 10,
-                  borderRadius: 4,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  fontWeight: 600,
-                }}
-              >
-                Today
-              </button>
-            )}
+      <main style={{ padding: "32px", flex: 1, display: "flex", justifyContent: "center", overflow: "hidden" }}>
+        <div style={{ width: "100%", maxWidth: 1180, display: "flex", flexDirection: "column", gap: 18, minHeight: 0 }}>
+          {/* Header showing selected date & DateNavigator */}
+          <div className="grid-card" style={{ padding: "14px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexShrink: 0 }}>
+            <div className="zine-paperclip" />
+            <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+              <div className="zine-eyebrow blue" style={{ marginBottom: 0, flexShrink: 0 }}>
+                <span>↳ food & spend</span>
+                <span>01</span>
+              </div>
+              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {data.TODAY.dateLong}
+              </h1>
+            </div>
+            <DateNavigator selectedDate={date} onChange={setDate} compact />
           </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 28, flex: 1, minHeight: 0 }}>
           {/* Spending Section (placed above food) */}
-          <div>
+          <div className="grid-card" style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
+            <div className="zine-paperclip" />
             <Eyebrow
               label="Spending"
               right={
@@ -1885,12 +2760,12 @@ export function FoodSpendingPage() {
                     style={{
                       background: showAddForm ? "var(--rose)" : "var(--blue)",
                       color: "#fffaf0",
-                      border: "none",
-                      padding: "4px 10px",
+                      border: "2px solid #000",
+                      padding: "4px 9px",
                       cursor: "pointer",
                       fontFamily: "var(--mono)",
                       fontSize: 10,
-                      borderRadius: 4,
+                      borderRadius: 0,
                       textTransform: "uppercase",
                       letterSpacing: "0.08em",
                       fontWeight: 600,
@@ -1918,10 +2793,10 @@ export function FoodSpendingPage() {
                   flexDirection: "column",
                   gap: 16,
                   padding: "16px 20px",
-                  background: "linear-gradient(180deg, rgba(36,84,214,0.06), transparent)",
-                  border: "1px solid var(--line)",
-                  borderRadius: 12,
-                  marginBottom: 24,
+                  background: "var(--bg)",
+                  border: "2px solid #000",
+                  borderRadius: 0,
+                  marginBottom: 8,
                   animation: "fadeIn 0.2s ease-out",
                 }}
               >
@@ -1936,8 +2811,8 @@ export function FoodSpendingPage() {
                       onChange={(e) => setItem(e.target.value)}
                       style={{
                         padding: "8px 12px",
-                        border: "1px solid var(--line)",
-                        borderRadius: 6,
+                        border: "2px solid #000",
+                        borderRadius: 0,
                         background: "var(--bg)",
                         color: "var(--text)",
                         fontSize: 14,
@@ -1961,8 +2836,8 @@ export function FoodSpendingPage() {
                       onChange={(e) => setAmount(e.target.value)}
                       style={{
                         padding: "8px 12px",
-                        border: "1px solid var(--line)",
-                        borderRadius: 6,
+                        border: "2px solid #000",
+                        borderRadius: 0,
                         background: "var(--bg)",
                         color: "var(--text)",
                         fontSize: 14,
@@ -1984,8 +2859,8 @@ export function FoodSpendingPage() {
                       onChange={(e) => setCategory(e.target.value)}
                       style={{
                         padding: "8px 12px",
-                        border: "1px solid var(--line)",
-                        borderRadius: 6,
+                        border: "2px solid #000",
+                        borderRadius: 0,
                         background: "var(--bg)",
                         color: "var(--text)",
                         fontSize: 14,
@@ -2016,8 +2891,8 @@ export function FoodSpendingPage() {
                       onChange={(e) => setTime(e.target.value)}
                       style={{
                         padding: "8px 12px",
-                        border: "1px solid var(--line)",
-                        borderRadius: 6,
+                        border: "2px solid #000",
+                        borderRadius: 0,
                         background: "var(--bg)",
                         color: "var(--text)",
                         fontSize: 14,
@@ -2037,12 +2912,12 @@ export function FoodSpendingPage() {
                   style={{
                     background: "var(--blue)",
                     color: "#fffaf0",
-                    border: "none",
+                    border: "2px solid #000",
                     padding: "10px",
                     cursor: loading ? "not-allowed" : "pointer",
                     fontFamily: "var(--mono)",
                     fontSize: 12,
-                    borderRadius: 6,
+                    borderRadius: 0,
                     textTransform: "uppercase",
                     letterSpacing: "0.12em",
                     fontWeight: 600,
@@ -2097,13 +2972,73 @@ export function FoodSpendingPage() {
             )}
           </div>
 
-          {/* Food Section (placed below spending) */}
-          <div>
-            <Eyebrow label="Food" right={`${data.MEALS.length} logged`} />
+          {/* Food Section */}
+          <div className="grid-card" style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
+            <div className="zine-paperclip" />
+            <Eyebrow
+              label="Food"
+              right={
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span>{data.MEALS.length} logged</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddFoodForm(!showAddFoodForm)}
+                    style={{
+                      background: showAddFoodForm ? "var(--rose)" : "var(--blue)",
+                      color: "#fffaf0",
+                      border: "2px solid #000",
+                      padding: "4px 9px",
+                      cursor: "pointer",
+                      fontFamily: "var(--mono)",
+                      fontSize: 10,
+                      borderRadius: 0,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {showAddFoodForm ? "Cancel" : "+ Add"}
+                  </button>
+                </div>
+              }
+            />
             <LedgerHeader items={[
               { label: "kcal", value: data.VITALS.kcal.today, of: data.VITALS.kcal.target },
               { label: "protein", value: data.VITALS.protein.today, of: data.VITALS.protein.target, unit: "g" },
             ]} />
+
+            {showAddFoodForm && (
+              <form
+                onSubmit={handleAddFood}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  padding: "16px 20px",
+                  background: "var(--bg)",
+                  border: "2px solid #000",
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 92px 92px", gap: 10 }}>
+                  <input type="text" required placeholder="Food" value={foodLabel} onChange={(e) => setFoodLabel(e.target.value)} style={compactInputStyle} />
+                  <input type="number" placeholder="kcal" value={foodKcal} onChange={(e) => setFoodKcal(e.target.value)} style={compactInputStyle} />
+                  <input type="number" placeholder="protein" value={foodProtein} onChange={(e) => setFoodProtein(e.target.value)} style={compactInputStyle} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 90px auto", gap: 10 }}>
+                  <select value={foodMeal} onChange={(e) => setFoodMeal(e.target.value)} style={compactInputStyle}>
+                    <option value="breakfast">Breakfast</option>
+                    <option value="lunch">Lunch</option>
+                    <option value="dinner">Dinner</option>
+                    <option value="snack">Snack</option>
+                  </select>
+                  <input type="number" placeholder="cost" value={foodCost} onChange={(e) => setFoodCost(e.target.value)} style={compactInputStyle} />
+                  <button type="submit" disabled={foodLoading} style={compactButtonStyle}>
+                    {foodLoading ? "Saving" : "Save"}
+                  </button>
+                </div>
+              </form>
+            )}
             
             {data.MEALS.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
@@ -2140,157 +3075,9 @@ export function FoodSpendingPage() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Right Panel: Calendar picker */}
-        <div style={{ padding: "32px 36px", display: "flex", flexDirection: "column", gap: 24 }}>
-          <div>
-            <Eyebrow label="Calendar Selection" color="var(--blue)" />
-            
-            {/* Calendar Month Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month - 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ‹
-              </button>
-              
-              <div className="mono uc" style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", letterSpacing: "0.14em" }}>
-                {format(viewDate, "MMMM yyyy")}
-              </div>
-              
-              <button
-                type="button"
-                onClick={() => setViewDate(new Date(year, month + 1, 1))}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--muted)",
-                  fontSize: 18,
-                  padding: "4px 8px",
-                  lineHeight: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 4,
-                  transition: "background 0.2s",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
-                onMouseOut={(e) => (e.currentTarget.style.background = "none")}
-              >
-                ›
-              </button>
-            </div>
-
-            {/* Calendar Weekday Names */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center", marginBottom: 8 }}>
-              {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-                <div key={day} className="mono uc" style={{ fontSize: 9.5, color: "var(--dim)", fontWeight: 500 }}>
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Grid Cells */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-              {calendarDays.map((day, idx) => {
-                const isSelected = day.isoStr === date;
-                const isToday = day.isoStr === localIsoDate();
-                
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setDate(day.isoStr)}
-                    style={{
-                      aspectRatio: "1",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: isSelected ? "var(--blue)" : "transparent",
-                      color: isSelected ? "#fffaf0" : day.isCurrentMonth ? "var(--text)" : "var(--dim)",
-                      border: isToday && !isSelected ? "1px solid var(--blue)" : "none",
-                      borderRadius: "50%",
-                      cursor: "pointer",
-                      fontSize: 11,
-                      fontFamily: "var(--mono)",
-                      fontWeight: isSelected ? "600" : "400",
-                      position: "relative",
-                      transition: "background 0.15s, color 0.15s",
-                    }}
-                    onMouseOver={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "var(--bg-2)";
-                    }}
-                    onMouseOut={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    {day.dayNum}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Vitals Summary Card */}
-          <div
-            style={{
-              marginTop: 8,
-              padding: "16px 20px",
-              background: "linear-gradient(180deg, rgba(36,84,214,0.06), transparent)",
-              border: "1px solid var(--line)",
-              borderRadius: 12,
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            <div className="mono uc" style={{ fontSize: 10.5, color: "var(--blue)", letterSpacing: "0.18em", fontWeight: 600 }}>
-              Day Summary
-            </div>
-            
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 12.5, color: "var(--muted)", textTransform: "uppercase" }}>Spending</span>
-                <span className="mono" style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
-                  ₹{data.VITALS.spend.today.toFixed(0)} <span style={{ color: "var(--dim)", fontSize: 10 }}>/ ₹{data.VITALS.spend.target}</span>
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 12.5, color: "var(--muted)", textTransform: "uppercase" }}>Calories</span>
-                <span className="mono" style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
-                  {data.VITALS.kcal.today} <span style={{ color: "var(--dim)", fontSize: 10 }}>/ {data.VITALS.kcal.target} kcal</span>
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 12.5, color: "var(--muted)", textTransform: "uppercase" }}>Protein</span>
-                <span className="mono" style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
-                  {data.VITALS.protein.today}g <span style={{ color: "var(--dim)", fontSize: 10 }}>/ {data.VITALS.protein.target}g</span>
-                </span>
-              </div>
-            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

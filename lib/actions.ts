@@ -2,7 +2,8 @@ import { type FoodEntry, type SpendEntry, type TimeBlock } from "./types";
 import { insertSpending } from "./spending-supabase";
 import { insertLearning } from "./learnings-supabase";
 import { insertProblem } from "./problems-supabase";
-import { appendLifeworkSection } from "./lifeswork-supabase";
+import { insertIdea, listUniqueCategories } from "./ideas-supabase";
+import { classifyIdea } from "./classify-idea";
 import { insertFoodEntry } from "./food-supabase";
 import { insertActivity } from "./activities-supabase";
 import { insertTimeBlock } from "./time-blocks-supabase";
@@ -48,6 +49,61 @@ function formatDateLabel(dateStr?: string): string {
   } catch {
     return ` on ${dateStr}`;
   }
+}
+
+async function insertTaskEntry(
+  baseDate: string,
+  taskData: { title: string; due_date?: string; due_time?: string; due_in_minutes?: number }
+): Promise<{ title: string; label: string }> {
+  const title = taskData.title ?? "Untitled task";
+  const rawDue = taskData.due_date ?? "today";
+  const dueInRaw = taskData.due_in_minutes;
+  const dueInMinutes =
+    typeof dueInRaw === "number"
+      ? dueInRaw
+      : typeof dueInRaw === "string"
+        ? Number.parseFloat(dueInRaw)
+        : NaN;
+  let dueDate: Date;
+
+  if (Number.isFinite(dueInMinutes) && dueInMinutes >= 0) {
+    dueDate = new Date();
+    dueDate.setMinutes(dueDate.getMinutes() + Math.round(dueInMinutes));
+  } else {
+    let targetDateStr = baseDate;
+    
+    if (rawDue === "tomorrow") {
+      const d = new Date(`${baseDate}T00:00:00+05:30`);
+      d.setDate(d.getDate() + 1);
+      targetDateStr = currentIstDate(d);
+    } else if (rawDue !== "today" && /^\d{4}-\d{2}-\d{2}$/.test(rawDue)) {
+      targetDateStr = rawDue;
+    }
+
+    const targetTimeStr = taskData.due_time ?? "23:59";
+    
+    dueDate = new Date(`${targetDateStr}T${targetTimeStr}:00+05:30`);
+    if (isNaN(dueDate.getTime())) {
+      dueDate = new Date(`${baseDate}T23:59:00+05:30`);
+    }
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("tasks")
+    .insert({ title, due_at: dueDate.toISOString(), done: false });
+  if (error) throw new Error(error.message);
+
+  const label =
+    Number.isFinite(dueInMinutes) && dueInMinutes >= 0
+      ? `in ${Math.round(dueInMinutes)} min`
+      : rawDue === "today"
+        ? "today"
+        : rawDue === "tomorrow"
+          ? "tomorrow"
+          : rawDue;
+
+  return { title, label };
 }
 
 export async function applyParsedAction(
@@ -113,50 +169,16 @@ export async function applyParsedAction(
   }
 
   if (type === "task") {
-    const title = (data.title as string) ?? "Untitled task";
-    const rawDue = (data.due_date as string) ?? "today";
-    const dueInRaw = data.due_in_minutes;
-    const dueInMinutes =
-      typeof dueInRaw === "number"
-        ? dueInRaw
-        : typeof dueInRaw === "string"
-          ? Number.parseFloat(dueInRaw)
-          : NaN;
-    let dueDate: Date;
-
-    if (Number.isFinite(dueInMinutes) && dueInMinutes >= 0) {
-      dueDate = new Date();
-      dueDate.setMinutes(dueDate.getMinutes() + Math.round(dueInMinutes));
-    } else {
-      let targetDateStr = targetDate;
-      
-      if (rawDue === "tomorrow") {
-        const d = new Date(`${targetDate}T00:00:00+05:30`);
-        d.setDate(d.getDate() + 1);
-        targetDateStr = currentIstDate(d);
-      } else if (rawDue !== "today" && /^\d{4}-\d{2}-\d{2}$/.test(rawDue)) {
-        targetDateStr = rawDue;
-      }
-
-      const targetTimeStr = (data.due_time as string) ?? "23:59";
-      
-      dueDate = new Date(`${targetDateStr}T${targetTimeStr}:00+05:30`);
-      if (isNaN(dueDate.getTime())) {
-        dueDate = new Date(`${targetDate}T23:59:00+05:30`);
-      }
-    }
-
-    const supabase = createAdminClient();
-    const { error } = await supabase
-      .from("tasks")
-      .insert({ title, due_at: dueDate.toISOString(), done: false });
-    if (error) throw new Error(error.message);
-    if (Number.isFinite(dueInMinutes) && dueInMinutes >= 0) {
-      return `Task added: "${title}" due in ${Math.round(dueInMinutes)} min`;
-    }
-    const label =
-      rawDue === "today" ? "today" : rawDue === "tomorrow" ? "tomorrow" : rawDue;
+    const { title, label } = await insertTaskEntry(targetDate, data as any);
     return `Task added: "${title}" due ${label}`;
+  }
+
+  if (type === "tasks") {
+    const tasks = (data.tasks ?? []) as Array<{ title: string; due_date?: string; due_time?: string; due_in_minutes?: number }>;
+    const saved = await Promise.all(
+      tasks.map((t) => insertTaskEntry(targetDate, t))
+    );
+    return saved.map((s) => `"${s.title}" due ${s.label}`).join(" · ");
   }
 
   if (type === "learning") {
@@ -165,10 +187,12 @@ export async function applyParsedAction(
     return `Learning logged: "${text.slice(0, 60)}"`;
   }
 
-  if (type === "goal") {
+  if (type === "idea") {
     const text = extractText(data);
-    await appendLifeworkSection("goals", text);
-    return `Goal added`;
+    const existingCategories = await listUniqueCategories();
+    const category = await classifyIdea(text, existingCategories);
+    const idea = await insertIdea(text, category);
+    return `Idea logged under "${idea.category}": "${text.slice(0, 60)}"`;
   }
 
   if (type === "problem") {
@@ -310,13 +334,32 @@ export function formatActionPreview(action: ParsedAction): string {
     return `I parsed a task: *${data.title}*, due *${due}*.\nSave it? Reply *yes* or *no*.`;
   }
 
+  if (type === "tasks") {
+    const tasks = (data.tasks ?? []) as Array<{ title: string; due_date?: string; due_time?: string; due_in_minutes?: number }>;
+    const lines = tasks.map((t) => {
+      const rawMin = t.due_in_minutes;
+      const mins =
+        typeof rawMin === "number"
+          ? rawMin
+          : typeof rawMin === "string"
+            ? Number.parseFloat(rawMin)
+            : NaN;
+      if (Number.isFinite(mins) && mins >= 0) {
+        return `*${t.title}* (due in ${Math.round(mins)} min)`;
+      }
+      const due = t.due_date ?? "today";
+      return `*${t.title}* (due ${due})`;
+    }).join("\n");
+    return `I found ${tasks.length} tasks:\n${lines}\nSave them? Reply *yes* or *no*.`;
+  }
+
   if (type === "learning") {
     const dateLabel = formatDateLabel(data.date as string);
     return `I parsed a learning note${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
-  if (type === "goal") {
-    return `I parsed a goal item.\nNote it down? Reply *yes* or *no*.`;
+  if (type === "idea") {
+    return `I parsed an idea: *${data.text}*.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "problem") {

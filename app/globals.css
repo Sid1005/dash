@@ -33,22 +33,24 @@
 }
 
 :root {
-  --bg: #fffaf0;
-  --bg-2: #f6ecda;
-  --card: #fffaf0;
-  --card-2: #efe3ce;
-  --line: #dfd0b8;
-  --line-strong: #cdbb9f;
-  --text: #171411;
-  --muted: #766c5b;
-  --dim: #b1a38d;
-  --blue: #2454d6;
-  --blue-soft: #2454d6;
-  --blue-deep: #d8e0f5;
+  --bg: #dfdfd7; /* raw newsprint */
+  --bg-2: #e4e4df;
+  --card: #e4e4df;
+  --card-2: #d1d1ca;
+  --line: #000000;
+  --line-strong: #000000;
+  --text: #000000;
+  --muted: #55554e;
+  --dim: #777770;
+  --blue: #000000;
+  --blue-soft: #55554e;
+  --blue-deep: #d1d1ca;
   --rose: #b24444;
+  --amber: #c47e22;
+  --green: #2d7a55;
   --mono: var(--font-label), ui-monospace, monospace;
-  --sans: var(--font-serif), ui-serif, Georgia, serif;
-  --radius: 0.5rem;
+  --sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --radius: 0px; /* square edges */
 }
 
 @layer base {
@@ -58,7 +60,7 @@
 
   html {
     font-size: 15px;
-    line-height: 1.45;
+    line-height: 1.5;
     letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
   }
@@ -71,8 +73,7 @@
     font-family: var(--sans);
     font-optical-sizing: auto;
     font-weight: 300;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
   }
 
   input,
@@ -88,8 +89,7 @@
   h3,
   h4 {
     font-weight: 300;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
   }
 }
 
@@ -100,9 +100,122 @@
 
 .uc {
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
 }
 
 a {
   color: inherit;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.nav-link {
+  position: relative;
+  text-decoration: none;
+  color: var(--muted);
+  transition: color 0.18s;
+}
+.nav-link:hover {
+  color: var(--text);
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  transform: scaleX(0);
+  height: 1.5px;
+  bottom: -4px;
+  left: 0;
+  background-color: var(--text);
+  transform-origin: bottom right;
+  transition: transform 0.2s ease-out;
+}
+.nav-link:hover::after, .nav-link-active::after {
+  transform: scaleX(1);
+  transform-origin: bottom left;
+}
+.nav-link-active {
+  color: var(--text) !important;
+  font-weight: 600;
+}
+
+.grid-card {
+  border: 3px solid #000000;
+  background-color: var(--card);
+  position: relative;
+  border-radius: var(--radius);
+  box-shadow: 6px 6px 0px #000000;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.grid-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0px #000000;
+}
+
+/* Zine Highlighter Eyebrow tags */
+.zine-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  background: #fef08a; /* yellow highlighter */
+  align-self: flex-start;
+  padding: 1px 6px;
+  margin-bottom: 12px;
+  border: 1px solid #000000;
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  white-space: nowrap;
+  box-shadow: 1.5px 1.5px 0px #000000;
+}
+.zine-eyebrow.blue {
+  background: #7dd3fc; /* blue highlighter */
+}
+
+/* Metal Staple/Paperclip overlay */
+.zine-paperclip {
+  position: absolute;
+  top: -8px;
+  right: 20px;
+  width: 8px;
+  height: 24px;
+  border: 2px solid #000000;
+  background: #cccccc;
+  border-radius: 4px;
+  transform: rotate(15deg);
+  box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+  pointer-events: none;
+  z-index: 100;
+}
+
+@keyframes breathe-pulse {
+  0%, 100% { transform: scale(0.68); opacity: 0.35; }
+  45% { transform: scale(1.02); opacity: 0.9; }
+  55% { transform: scale(1.02); opacity: 0.9; }
+}
+.breathe-indicator {
+  animation: breathe-pulse 10s cubic-bezier(.4, 0, .2, 1) infinite;
+  transform-origin: center;
+}
+
+.deck-card {
+  transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s ease, z-index 0.3s;
+}
+
+/* Custom scrollbar override */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text);
 }

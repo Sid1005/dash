@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Newsreader } from "next/font/google";
+import { IBM_Plex_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
-const serif = Newsreader({
-  variable: "--font-serif",
+const sans = Plus_Jakarta_Sans({
+  variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${serif.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

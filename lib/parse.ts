@@ -42,6 +42,9 @@ General guidelines:
   - Use log_journal_note for completed actions without duration (e.g., "10 pushups done", "wrote diary"). Set kind to "activity".
 - For calendar time blocks:
   - If a time range is vague, use current time context to guess.
+- For tasks / to-do items:
+  - If the user provides a list of multiple tasks/to-do items (e.g., multiple lines, a bulleted/numbered list, or multiple distinct actions to be done in the future), use add_tasks.
+  - If the user provides a single task, use add_task.
 - For combined food and spending (e.g., "spent 200 on chicken rice"):
   - Use log_food_and_spending.
 `;
@@ -251,6 +254,32 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "add_tasks",
+      description: "Add multiple tasks / to-do items from a single message.",
+      parameters: {
+        type: "object",
+        properties: {
+          tasks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Title of the task." },
+                due_date: { type: "string", description: "When the task is due. Can be 'today', 'tomorrow', or 'YYYY-MM-DD' format." },
+                due_time: { type: "string", description: "Specific time when task is due in 24-hour HH:MM format." },
+                due_in_minutes: { type: "integer", description: "Positive integer representing relative time in minutes from now (e.g. 'in 2 hours' -> 120). Use this for relative offsets." }
+              },
+              required: ["title"]
+            }
+          }
+        },
+        required: ["tasks"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "log_learning",
       description: "Log a newly learned lesson or fact.",
       parameters: {
@@ -266,12 +295,12 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "log_goal",
-      description: "Log a new goal.",
+      name: "log_idea",
+      description: "Log a new idea (a problem to work on, something interesting to build, change in company, or something to work on).",
       parameters: {
         type: "object",
         properties: {
-          text: { type: "string", description: "Description of the goal." }
+          text: { type: "string", description: "Description of the idea." }
         },
         required: ["text"]
       }
@@ -333,8 +362,9 @@ export interface ParsedAction {
     | "time_block"
     | "time_blocks"
     | "task"
+    | "tasks"
     | "learning"
-    | "goal"
+    | "idea"
     | "note"
     | "workout"
     | "chat"
@@ -465,10 +495,12 @@ If the user's input is a completely new command, ignore the pending action and p
         return { type: "time_blocks", data: args };
       case "add_task":
         return { type: "task", data: args };
+      case "add_tasks":
+        return { type: "tasks", data: args };
       case "log_learning":
         return { type: "learning", data: args };
-      case "log_goal":
-        return { type: "goal", data: args };
+      case "log_idea":
+        return { type: "idea", data: args };
       case "log_problem":
         return { type: "problem", data: args };
       case "log_journal_note":

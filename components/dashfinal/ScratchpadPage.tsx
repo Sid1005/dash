@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { PageHeader, LoadingPage, Eyebrow, useDashData, BROWN_LINE } from "./DashFinal";
-import { Check } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { PageHeader, LoadingPage, useDashData } from "./DashFinal";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 
 interface ScratchItem {
   id: string;
@@ -12,7 +12,13 @@ interface ScratchItem {
 }
 
 export function ScratchpadPage() {
-  const data = useDashData();
+  const data = useDashData(undefined, 0, {
+    includeLearnings: false,
+    includeTasks: false,
+    includeCalendar: false,
+    includeProblems: false,
+    includeQuotes: false,
+  });
   const [items, setItems] = useState<ScratchItem[]>([]);
   const [inputText, setInputText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -85,235 +91,192 @@ export function ScratchpadPage() {
     setEditingId(null);
   };
 
-  const handleClearCompleted = () => {
-    const updated = items.filter((item) => !item.done);
-    saveItems(updated);
-  };
-
   if (!data) return <LoadingPage />;
 
-  const activeItems = items.filter((item) => !item.done);
-  const completedItems = items.filter((item) => item.done);
+  const openCount = items.filter((item) => !item.done).length;
 
   return (
     <div style={pageStyle}>
       <PageHeader active="scratchpad" data={data} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", flex: 1 }}>
-        {/* Left main area: Scratchpad checklist */}
-        <div style={{ padding: "34px 40px 48px", borderRight: `1px solid ${BROWN_LINE}` }}>
-          {/* Quick Add Form */}
-          <Eyebrow label="Add Scratch Task" color="var(--blue)" />
-          <form onSubmit={handleAddItem} style={cardStyle}>
-            <div style={{ display: "flex", gap: 12 }}>
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="What needs to be done next?"
-                required
-                style={{
-                  ...inputStyle,
-                  flex: 1,
-                }}
-              />
-              <button
-                type="submit"
-                disabled={!inputText.trim()}
-                style={buttonStyle}
-              >
-                Add Task
-              </button>
-            </div>
-          </form>
-
-          {/* Active Items */}
-          <Eyebrow label={`Active Checklist (${activeItems.length})`} color="var(--blue)" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 40 }}>
-            {activeItems.length > 0 ? (
-              activeItems.map((item) => (
-                <div key={item.id} style={itemRowStyle}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleItem(item.id)}
-                      style={checkboxStyle(false)}
-                      aria-label="Complete task"
-                    />
-                    
-                    {editingId === item.id ? (
-                      <input
-                        ref={editInputRef}
-                        type="text"
-                        value={editingText}
-                        onChange={(e) => setEditingText(e.target.value)}
-                        onBlur={() => handleSaveEdit(item.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSaveEdit(item.id);
-                          if (e.key === "Escape") setEditingId(null);
-                        }}
-                        style={inlineEditInputStyle}
-                      />
-                    ) : (
-                      <span
-                        onDoubleClick={() => handleStartEdit(item)}
-                        style={{ fontSize: 14.5, color: "var(--text)", cursor: "pointer", textTransform: "none", letterSpacing: "normal" }}
-                        title="Double click to edit"
-                      >
-                        {item.text}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(item)}
-                      style={actionBtnStyle}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteItem(item.id)}
-                      style={{ ...actionBtnStyle, color: "var(--rose)" }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="mono uc" style={{ fontSize: 11, color: "var(--dim)", padding: "20px 0", letterSpacing: "0.14em" }}>
-                No active tasks logged. Add above!
+      <main style={{ flex: 1, minHeight: 0, padding: "32px 32px 40px", boxSizing: "border-box", overflow: "hidden", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 820, height: "100%", minHeight: 0 }}>
+          <section style={{ display: "flex", flexDirection: "column", gap: 22, height: "100%", minHeight: 0 }}>
+            <form onSubmit={handleAddItem} className="grid-card" style={captureCardStyle}>
+              <div className="zine-paperclip" />
+              <div className="zine-eyebrow blue">
+                <span>↳ scratch capture</span>
+                <span>01</span>
               </div>
-            )}
-          </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={roundIconStyle}>
+                  <Plus size={16} />
+                </div>
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Drop the next loose thread..."
+                  required
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <button
+                  type="submit"
+                  disabled={!inputText.trim()}
+                  style={buttonStyle}
+                >
+                  Add
+                </button>
+              </div>
+            </form>
 
-          {/* Completed Items */}
-          {completedItems.length > 0 && (
-            <div>
-              <Eyebrow
-                label={`Completed Items (${completedItems.length})`}
-                color="var(--dim)"
-                right={
-                  <button
-                    type="button"
-                    onClick={handleClearCompleted}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--rose)",
-                      fontFamily: "var(--mono)",
-                      fontSize: 10.5,
-                      cursor: "pointer",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    Clear Completed
-                  </button>
-                }
-              />
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                {completedItems.map((item) => (
-                  <div key={item.id} style={{ ...itemRowStyle, opacity: 0.6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+            <div className="grid-card" style={activeCardStyle}>
+              <div className="zine-paperclip" />
+              <div style={cardHeaderStyle}>
+                <div className="zine-eyebrow">
+                  <span>↳ active scratch list</span>
+                  <span>02</span>
+                </div>
+                <span className="mono" style={countStyle}>{openCount} open</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", minHeight: 0, flex: 1 }}>
+                {items.length > 0 ? (
+                  items.map((item) => (
+                    <div key={item.id} style={{ ...itemRowStyle, opacity: item.done ? 0.62 : 1 }}>
                       <button
                         type="button"
                         onClick={() => handleToggleItem(item.id)}
-                        style={checkboxStyle(true)}
-                        aria-label="Mark task incomplete"
+                        style={checkboxStyle(item.done)}
+                        aria-label={item.done ? "Mark task incomplete" : "Complete task"}
                       >
-                        <Check size={12} style={{ color: "var(--blue)" }} />
+                        {item.done && <Check size={12} style={{ color: "#0c0c0e" }} />}
                       </button>
-                      <span
-                        style={{
-                          fontSize: 14.5,
-                          color: "var(--text)",
-                          textDecoration: "line-through",
-                          textTransform: "none",
-                          letterSpacing: "normal",
-                        }}
-                      >
-                        {item.text}
-                      </span>
+
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        {editingId === item.id ? (
+                          <input
+                            ref={editInputRef}
+                            type="text"
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveEdit(item.id);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            style={inlineEditInputStyle}
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={() => handleStartEdit(item)}
+                            style={{
+                              ...itemTextStyle,
+                              textDecoration: item.done ? "line-through" : "none",
+                            }}
+                            title="Double click to edit"
+                          >
+                            {item.text}
+                          </span>
+                        )}
+                        <div className="mono" style={metaStyle}>
+                          logged {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(item)}
+                          style={iconBtnStyle}
+                          title="Edit"
+                          aria-label="Edit task"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteItem(item.id)}
+                          style={{ ...iconBtnStyle, color: "var(--rose)" }}
+                          title="Delete"
+                          aria-label="Delete task"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteItem(item.id)}
-                      style={{ ...actionBtnStyle, color: "var(--rose)" }}
-                    >
-                      Delete
-                    </button>
+                  ))
+                ) : (
+                  <div className="mono" style={emptyStateStyle}>
+                    No scratch tasks yet.
                   </div>
-                ))}
+                )}
               </div>
             </div>
-          )}
+          </section>
         </div>
-
-        {/* Right column sidebar */}
-        <div style={{ padding: "32px 36px", display: "flex", flexDirection: "column", gap: 24 }}>
-          <div>
-            <Eyebrow label="Focus Target" color="var(--blue)" />
-            <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55, fontStyle: "italic", textTransform: "none", letterSpacing: "normal" }}>
-              "Keep your head down and execute the plan. Single tasking is your superpower."
-            </div>
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
 
 // Vintage Academic styling parameters
 const pageStyle: React.CSSProperties = {
-  minHeight: "100vh",
+  height: "100vh",
   background: "var(--bg)",
   color: "var(--text)",
   display: "flex",
   flexDirection: "column",
   fontFamily: "var(--sans)",
+  overflow: "hidden",
 };
 
-const cardStyle: React.CSSProperties = {
-  background: "linear-gradient(180deg, rgba(205,187,159,0.12), transparent)",
-  border: "1px solid var(--line)",
-  borderRadius: "12px",
-  padding: "20px",
-  marginBottom: "28px",
+const captureCardStyle: React.CSSProperties = {
+  padding: "26px 30px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 16,
+  flexShrink: 0,
+};
+
+const activeCardStyle: React.CSSProperties = {
+  padding: "28px 34px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 18,
+  minHeight: 0,
+  flex: 1,
 };
 
 const inputStyle: React.CSSProperties = {
-  background: "var(--bg)",
-  border: "1px solid var(--line)",
-  borderRadius: "6px",
-  padding: "10px 14px",
+  background: "#ffffff",
+  border: "2px solid #000000",
+  borderRadius: 0,
+  padding: "12px 14px",
   color: "var(--text)",
-  fontSize: "14px",
+  fontSize: "15px",
   outline: "none",
   textTransform: "none",
+  fontFamily: "inherit",
 };
 
 const inlineEditInputStyle: React.CSSProperties = {
-  background: "var(--bg)",
-  border: "1px solid var(--blue)",
-  borderRadius: "4px",
-  padding: "4px 8px",
+  background: "#ffffff",
+  border: "2px solid #000000",
+  borderRadius: 0,
+  padding: "7px 9px",
   color: "var(--text)",
   fontSize: "14px",
   outline: "none",
-  flex: 1,
+  width: "100%",
   textTransform: "none",
 };
 
 const buttonStyle: React.CSSProperties = {
-  background: "var(--blue)",
-  color: "#fffaf0",
+  background: "#0c0c0e",
+  color: "#faf9f6",
   border: "none",
-  borderRadius: "6px",
-  padding: "10px 18px",
-  fontSize: "11px",
+  borderRadius: 0,
+  padding: "0 18px",
+  fontSize: "10px",
   fontFamily: "var(--mono)",
   letterSpacing: "0.1em",
   textTransform: "uppercase",
@@ -323,31 +286,84 @@ const buttonStyle: React.CSSProperties = {
 
 const itemRowStyle: React.CSSProperties = {
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   justifyContent: "space-between",
-  padding: "10px 0",
-  borderBottom: "1px dashed var(--line)",
+  gap: 12,
+  padding: "14px 0",
+  borderBottom: "1px dashed #000000",
 };
 
 const checkboxStyle = (isDone: boolean): React.CSSProperties => ({
   width: 18,
   height: 18,
-  border: "2px solid var(--blue)",
-  borderRadius: 4,
-  background: isDone ? "rgba(36,84,214,0.08)" : "transparent",
+  border: "2px solid #000000",
+  borderRadius: 0,
+  background: isDone ? "#7dd3fc" : "transparent",
   cursor: "pointer",
   display: "grid",
   placeItems: "center",
   flexShrink: 0,
+  marginTop: 2,
 });
 
-const actionBtnStyle: React.CSSProperties = {
+const iconBtnStyle: React.CSSProperties = {
   background: "none",
-  border: "none",
+  border: "1px solid #000000",
   cursor: "pointer",
+  color: "#0c0c0e",
+  width: 26,
+  height: 26,
+  display: "grid",
+  placeItems: "center",
+  padding: 0,
+  flexShrink: 0,
+};
+
+const roundIconStyle: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  border: "1.5px solid #0c0c0e",
+  borderRadius: 999,
+  display: "grid",
+  placeItems: "center",
+  flexShrink: 0,
+};
+
+const cardHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: 14,
+  flexShrink: 0,
+};
+
+const countStyle: React.CSSProperties = {
+  fontSize: 15,
+  color: "#0c0c0e",
+  whiteSpace: "nowrap",
+};
+
+const itemTextStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 15,
+  color: "var(--text)",
+  lineHeight: 1.35,
+  cursor: "pointer",
+  textTransform: "none",
+  letterSpacing: "normal",
+  overflowWrap: "anywhere",
+};
+
+const metaStyle: React.CSSProperties = {
+  fontSize: 8.5,
+  color: "#66666a",
+  marginTop: 4,
+};
+
+const emptyStateStyle: React.CSSProperties = {
+  fontSize: 11,
   color: "var(--muted)",
-  fontSize: "11px",
-  fontFamily: "var(--mono)",
+  padding: "24px 0",
+  letterSpacing: "0.12em",
   textTransform: "uppercase",
-  letterSpacing: "0.06em",
 };

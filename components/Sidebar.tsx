@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ListTodo,
-  Star,
+  Lightbulb,
   UtensilsCrossed,
   DollarSign,
   BookOpen,
@@ -14,7 +14,7 @@ import {
 const nav = [
   { label: "Tasks", href: "/", icon: ListTodo },
   { label: "Today", href: "/today", icon: LayoutDashboard },
-  { label: "Life's Work", href: "/lifeswork", icon: Star },
+  { label: "Ideas", href: "/ideas", icon: Lightbulb },
   { label: "Food", href: "/food", icon: UtensilsCrossed },
   { label: "Spending", href: "/spending", icon: DollarSign },
   { label: "Learnings", href: "/learnings", icon: BookOpen },

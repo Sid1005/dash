@@ -18,6 +18,18 @@ export async function listLearningsForDate(date: string): Promise<LearningRow[]>
   return (data ?? []) as LearningRow[];
 }
 
+export async function listLearningsInRange(startDate: string, endDate: string): Promise<LearningRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("learnings")
+    .select("id, occurred_date, text, created_at")
+    .gte("occurred_date", startDate)
+    .lte("occurred_date", endDate)
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as LearningRow[];
+}
+
 export async function insertLearning(date: string, text: string): Promise<LearningRow> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
