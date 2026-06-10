@@ -109,7 +109,7 @@ export function CalendarPage() {
 
       <main style={{ padding: "32px", flex: 1, minHeight: 0, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(340px, 430px)", gap: 28, height: "100%", maxWidth: 1180, margin: "0 auto" }}>
-          <section className="grid-card" style={{ padding: "24px 28px", minHeight: 0, display: "flex", flexDirection: "column", gap: 18 }}>
+          <section className="grid-card" style={{ padding: "24px 28px", minHeight: 0, display: "flex", flexDirection: "column", gap: 16, overflow: "hidden" }}>
             <div className="zine-paperclip" />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexShrink: 0 }}>
               <div>
@@ -124,7 +124,12 @@ export function CalendarPage() {
                 <DateNavigator selectedDate={date} onChange={setDate} compact />
               </div>
             </div>
-            <div style={{ overflowY: "auto", minHeight: 0 }}>
+            <div style={timelineMetaStyle}>
+              <span>15 min grid</span>
+              <span>{dayData?.blocks.length ?? 0} events</span>
+              <span>scroll day</span>
+            </div>
+            <div data-calendar-timeline-scroll style={timelineScrollStyle}>
               {dayData ? (
                 <DayTimeline blocks={dayData.blocks} tasks={[]} nowMin={now} isToday={isToday} />
               ) : (
@@ -298,6 +303,31 @@ const errorStyle = {
   color: "var(--rose)",
   fontSize: "11.5px",
   fontFamily: "var(--mono)",
+};
+
+const timelineMetaStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexShrink: 0,
+  borderTop: "2px solid #000",
+  borderBottom: "1px dashed #000",
+  padding: "8px 0",
+  color: "var(--muted)",
+  fontFamily: "var(--mono)",
+  fontSize: "10px",
+  letterSpacing: "0.12em",
+  textTransform: "uppercase" as const,
+};
+
+const timelineScrollStyle = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto" as const,
+  overflowX: "hidden" as const,
+  padding: "12px 8px 28px 0",
+  scrollbarGutter: "stable" as const,
 };
 
 const listHeaderStyle = {

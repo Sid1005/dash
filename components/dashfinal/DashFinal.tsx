@@ -1601,20 +1601,20 @@ function MiniDayTimeline({ blocks, nowMin }: { blocks: DashBlock[]; nowMin: numb
 
 export function DayTimeline({ blocks, tasks, nowMin, isToday }: { blocks: DashBlock[]; tasks: DashTask[]; nowMin: number; isToday: boolean }) {
   const SLOT_MINUTES = 15;
-  const SLOT_HEIGHT = 26;
+  const SLOT_HEIGHT = 44;
   const ROWS = Array.from({ length: Math.floor(TL_SPAN / SLOT_MINUTES) + 1 }, (_, i) => TL_START + i * SLOT_MINUTES);
-  const LABEL_W = 50;
+  const LABEL_W = 58;
   const timelineHeight = (ROWS.length - 1) * SLOT_HEIGHT;
   const minuteToPx = (min: number) => ((Math.min(TL_END, Math.max(TL_START, min)) - TL_START) / SLOT_MINUTES) * SLOT_HEIGHT;
   return (
-    <div data-day-timeline="15-min" style={{ position: "relative", height: timelineHeight, minHeight: timelineHeight, userSelect: "none" }}>
+    <div data-day-timeline="15-min" style={{ position: "relative", height: timelineHeight, minHeight: timelineHeight, userSelect: "none", paddingRight: 2 }}>
       {ROWS.map((minutes) => {
         const isHour = minutes % 60 === 0;
         const hour = Math.floor(minutes / 60);
         const minute = minutes % 60;
         return (
           <div key={minutes} style={{ position: "absolute", top: minuteToPx(minutes), left: 0, right: 0, display: "flex", alignItems: "flex-start", gap: 14, pointerEvents: "none" }}>
-            <span data-slot-label className="mono" style={{ fontSize: isHour ? 13 : 9, color: isHour ? "var(--dim)" : "var(--muted)", width: LABEL_W, textAlign: "right", flexShrink: 0, lineHeight: 1, marginTop: isHour ? -8 : -5, opacity: isHour ? 1 : 0.58 }}>
+            <span data-slot-label className="mono" style={{ fontSize: isHour ? 13 : 10, color: isHour ? "var(--dim)" : "var(--muted)", width: LABEL_W, textAlign: "right", flexShrink: 0, lineHeight: 1, marginTop: isHour ? -8 : -5, opacity: isHour ? 1 : 0.7 }}>
               {`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`}
             </span>
             <div style={{ flex: 1, borderTop: `${isHour ? 2 : 1}px ${isHour ? "solid" : "dashed"} ${isHour ? "var(--line)" : "rgba(0,0,0,0.18)"}` }} />
@@ -1623,13 +1623,14 @@ export function DayTimeline({ blocks, tasks, nowMin, isToday }: { blocks: DashBl
       })}
       {blocks.map((b, i) => {
         const top = minuteToPx(toMinutes(b.start));
-        const h = Math.max(minuteToPx(toMinutes(b.end)) - top, SLOT_HEIGHT - 4);
+        const h = Math.max(minuteToPx(toMinutes(b.end)) - top, SLOT_HEIGHT - 2);
         const isCal = b.kind === "cal";
         const bgColor = isCal ? "#1e5a8f" : (CAT_COLOR[b.cat || "Other"] ?? CAT_COLOR.Other);
+        const compact = h <= SLOT_HEIGHT + 2;
         return (
-          <div key={i} style={{ position: "absolute", top, height: h, left: LABEL_W + 18, right: 0, background: bgColor, border: "2px solid #000", borderRadius: 7, padding: h > 32 ? "5px 10px" : "2px 9px", overflow: "hidden", boxShadow: "2px 2px 0 #000" }}>
-            <div style={{ fontSize: h > 32 ? 13 : 11, color: "#fff", fontWeight: 800, lineHeight: 1.15, letterSpacing: 0, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.label}</div>
-            <div className="mono" style={{ fontSize: 10, color: "rgba(255,255,255,0.78)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div key={i} style={{ position: "absolute", top, height: h, left: LABEL_W + 18, right: 0, background: bgColor, border: "2px solid #000", borderRadius: 7, padding: compact ? "5px 10px" : "7px 12px", overflow: "hidden", boxShadow: "2px 2px 0 #000", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ fontSize: compact ? 12 : 13, color: "#fff", fontWeight: 800, lineHeight: 1.12, letterSpacing: 0, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.label}</div>
+            <div className="mono" style={{ fontSize: compact ? 10 : 11, color: "rgba(255,255,255,0.82)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {b.start}–{b.end}{b.cat && !isCal ? ` · ${b.cat}` : ""}{b.loc ? ` · ${b.loc}` : ""}
             </div>
           </div>
