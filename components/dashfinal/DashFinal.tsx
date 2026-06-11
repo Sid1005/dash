@@ -1600,47 +1600,59 @@ function MiniDayTimeline({ blocks, nowMin }: { blocks: DashBlock[]; nowMin: numb
 }
 
 export function DayTimeline({ blocks, tasks, nowMin, isToday }: { blocks: DashBlock[]; tasks: DashTask[]; nowMin: number; isToday: boolean }) {
-  const HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
-  const LABEL_W = 36;
+  const SLOT_MINUTES = 15;
+  const SLOT_HEIGHT = 44;
+  const ROWS = Array.from({ length: Math.floor(TL_SPAN / SLOT_MINUTES) + 1 }, (_, i) => TL_START + i * SLOT_MINUTES);
+  const LABEL_W = 58;
+  const timelineHeight = (ROWS.length - 1) * SLOT_HEIGHT;
+  const minuteToPx = (min: number) => ((Math.min(TL_END, Math.max(TL_START, min)) - TL_START) / SLOT_MINUTES) * SLOT_HEIGHT;
   return (
-    <div style={{ position: "relative", height: 560, userSelect: "none" }}>
-      {HOURS.map((h) => (
-        <div key={h} style={{ position: "absolute", top: `${tlPct(h * 60)}%`, left: 0, right: 0, display: "flex", alignItems: "flex-start", gap: 10, pointerEvents: "none" }}>
-          <span className="mono" style={{ fontSize: 10, color: "var(--dim)", width: LABEL_W, textAlign: "right", flexShrink: 0, lineHeight: 1, marginTop: -7 }}>{h < 10 ? `0${h}` : h}:00</span>
-          <div style={{ flex: 1, borderTop: "1px solid var(--line)" }} />
-        </div>
-      ))}
-      {blocks.map((b, i) => {
-        const top = tlPct(toMinutes(b.start));
-        const h = Math.max(tlPct(toMinutes(b.end)) - top, 1.5);
-        const isCal = b.kind === "cal";
-        // Calendar events: distinct teal-blue solid; time blocks: category color
-        const bgColor = isCal ? "#1e5a8f" : (CAT_COLOR[b.cat || "Other"] ?? CAT_COLOR.Other);
+    <div data-day-timeline="15-min" style={{ position: "relative", height: timelineHeight, minHeight: timelineHeight, userSelect: "none", paddingRight: 2 }}>
+      {ROWS.map((minutes) => {
+        const isHour = minutes % 60 === 0;
+        const hour = Math.floor(minutes / 60);
+        const minute = minutes % 60;
         return (
-          <div key={i} style={{ position: "absolute", top: `${top}%`, height: `${h}%`, left: LABEL_W + 14, right: 0, background: bgColor, borderRadius: 4, padding: "5px 10px", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.18)" }}>
-            <div style={{ fontSize: 13, color: "#fff", fontWeight: 600, lineHeight: 1.25, letterSpacing: "0.01em", textTransform: "uppercase" }}>{b.label}</div>
-            <div className="mono" style={{ fontSize: 10, color: "rgba(255,255,255,0.78)", marginTop: 2 }}>
+          <div key={minutes} style={{ position: "absolute", top: minuteToPx(minutes), left: 0, right: 0, display: "flex", alignItems: "flex-start", gap: 14, pointerEvents: "none" }}>
+            <span data-slot-label className="mono" style={{ fontSize: isHour ? 13 : 10, color: isHour ? "var(--dim)" : "var(--muted)", width: LABEL_W, textAlign: "right", flexShrink: 0, lineHeight: 1, marginTop: isHour ? -8 : -5, opacity: isHour ? 1 : 0.7 }}>
+              {`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`}
+            </span>
+            <div style={{ flex: 1, borderTop: `${isHour ? 2 : 1}px ${isHour ? "solid" : "dashed"} ${isHour ? "var(--line)" : "rgba(0,0,0,0.18)"}` }} />
+          </div>
+        );
+      })}
+      {blocks.map((b, i) => {
+        const top = minuteToPx(toMinutes(b.start));
+        const h = Math.max(minuteToPx(toMinutes(b.end)) - top, SLOT_HEIGHT - 2);
+        const isCal = b.kind === "cal";
+        const bgColor = isCal ? "#1e5a8f" : (CAT_COLOR[b.cat || "Other"] ?? CAT_COLOR.Other);
+        const compact = h <= SLOT_HEIGHT + 2;
+        return (
+          <div key={i} style={{ position: "absolute", top, height: h, left: LABEL_W + 18, right: 0, background: bgColor, border: "2px solid #000", borderRadius: 7, padding: compact ? "5px 10px" : "7px 12px", overflow: "hidden", boxShadow: "2px 2px 0 #000", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ fontSize: compact ? 12 : 13, color: "#fff", fontWeight: 800, lineHeight: 1.12, letterSpacing: 0, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.label}</div>
+            <div className="mono" style={{ fontSize: compact ? 10 : 11, color: "rgba(255,255,255,0.82)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {b.start}–{b.end}{b.cat && !isCal ? ` · ${b.cat}` : ""}{b.loc ? ` · ${b.loc}` : ""}
             </div>
           </div>
         );
       })}
       {tasks.map((t, i) => (
-        <div key={i} style={{ position: "absolute", left: LABEL_W + 14, zIndex: 3, top: `${tlPct(toMinutes(t.due.includes(":") ? t.due.split(" ").pop()! : "23:59"))}%` }}>
+        <div key={i} style={{ position: "absolute", left: LABEL_W + 18, zIndex: 3, top: minuteToPx(toMinutes(t.due.includes(":") ? t.due.split(" ").pop()! : "23:59")) }}>
           <span className="mono uc" style={{ fontSize: 9, color: "var(--rose)", border: "1px solid rgba(205,92,92,0.5)", borderRadius: 2, padding: "1px 5px", background: "var(--bg)", display: "inline-block", whiteSpace: "nowrap", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
             ✓ {t.title}
           </span>
         </div>
       ))}
       {isToday && nowMin >= TL_START && nowMin <= TL_END && (
-        <div style={{ position: "absolute", top: `${tlPct(nowMin)}%`, left: LABEL_W + 10, right: 0, zIndex: 2, display: "flex", alignItems: "center", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: minuteToPx(nowMin), left: LABEL_W + 14, right: 0, zIndex: 2, display: "flex", alignItems: "center", pointerEvents: "none" }}>
           <div style={{ width: 7, height: 7, borderRadius: 999, background: "var(--rose)", flexShrink: 0, marginTop: -3 }} />
           <div style={{ flex: 1, height: 1, background: "var(--rose)" }} />
         </div>
       )}
       {blocks.length === 0 && (
-        <div style={{ position: "absolute", top: "40%", left: LABEL_W + 14, right: 0, textAlign: "center" }}>
+        <div style={{ position: "absolute", top: 280, left: LABEL_W + 18, right: 0, textAlign: "center" }}>
           <div className="mono uc" style={{ fontSize: 11, color: "var(--dim)", letterSpacing: "0.2em" }}>No events</div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>Send time blocks via Telegram, e.g. "6-7 gym"</div>
         </div>
       )}
     </div>
