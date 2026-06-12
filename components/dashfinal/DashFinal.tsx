@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO, subDays } from "date-fns";
-import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check } from "lucide-react";
+import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check, Plus, Trash2, GripVertical } from "lucide-react";
 
 type TaskApiRow = {
   id: string;
@@ -129,6 +129,20 @@ export type DashData = {
   SCHEDULE_FOLLOWED_MIN: number;
   SCHEDULE_ELAPSED_MIN: number;
   QUOTES: QuoteRow[];
+};
+
+type CockpitCardItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+type CockpitPostcard = {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
+  items: CockpitCardItem[];
 };
 
 // ── Day timeline ──────────────────────────────────────────────────────────────
@@ -2256,10 +2270,127 @@ function QuotesDeck({
   );
 }
 
+function createDefaultCockpitCards(): CockpitPostcard[] {
+  return [
+    {
+      id: "doing",
+      title: "What I am doing",
+      x: 420,
+      y: 118,
+      items: [
+        { id: "doing-1", text: "Keep the current work visible", done: false },
+      ],
+    },
+    {
+      id: "thinking",
+      title: "Thinking space",
+      x: 760,
+      y: 248,
+      items: [
+        { id: "thinking-1", text: "Capture the next useful move", done: false },
+      ],
+    },
+  ];
+}
+
+function CockpitPostcardShell({
+  title,
+  eyebrow,
+  count,
+  x,
+  y,
+  children,
+  onPointerDown,
+}: {
+  title: string;
+  eyebrow: string;
+  count?: string;
+  x: number;
+  y: number;
+  children: React.ReactNode;
+  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      className="grid-card deck-card"
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width: 292,
+        minHeight: 238,
+        padding: 0,
+        overflow: "hidden",
+        background: "#fcfbf7",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div className="zine-paperclip" />
+      <div
+        onPointerDown={onPointerDown}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          borderBottom: "2px solid #000000",
+          background: "#fef08a",
+          padding: "10px 12px",
+          cursor: onPointerDown ? "grab" : "default",
+          touchAction: "none",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div className="mono" style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", color: "#0c0c0e" }}>
+            ↳ {eyebrow}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {title}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {count && <span className="mono" style={{ fontSize: 10 }}>{count}</span>}
+          {onPointerDown && <GripVertical size={14} />}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function CockpitPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [newProblem, setNewProblem] = useState("");
+  const [newCardTitle, setNewCardTitle] = useState("");
+  const [cards, setCards] = useState<CockpitPostcard[]>([]);
+  const [cardsLoaded, setCardsLoaded] = useState(false);
+  const [dragState, setDragState] = useState<{
+    id: string;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const data = useDashData(undefined, refreshTrigger, { includeLearnings: false });
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("dash_cockpit_postcards_v1");
+      const parsed = saved ? JSON.parse(saved) as CockpitPostcard[] : null;
+      setCards(Array.isArray(parsed) && parsed.length > 0 ? parsed : createDefaultCockpitCards());
+    } catch {
+      setCards(createDefaultCockpitCards());
+    } finally {
+      setCardsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!cardsLoaded) return;
+    window.localStorage.setItem("dash_cockpit_postcards_v1", JSON.stringify(cards));
+  }, [cards, cardsLoaded]);
 
   const solveProblem = useCallback(async (id: string) => {
     await fetch(`/api/problems/${id}`, {
@@ -2282,177 +2413,308 @@ export function CockpitPage() {
     setRefreshTrigger((prev) => prev + 1);
   }, [newProblem]);
 
-  const addQuote = useCallback(async (text: string, author?: string) => {
-    await fetch("/api/quotes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, author }),
-    });
-    setRefreshTrigger((prev) => prev + 1);
+  const createCard = useCallback((e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newCardTitle.trim()) return;
+    const offset = cards.length % 5;
+    const card: CockpitPostcard = {
+      id: Math.random().toString(36).slice(2, 10),
+      title: newCardTitle.trim(),
+      x: 410 + offset * 38,
+      y: 410 + offset * 28,
+      items: [],
+    };
+    setCards((current) => [...current, card]);
+    setNewCardTitle("");
+  }, [cards.length, newCardTitle]);
+
+  const addCardItem = useCallback((cardId: string, text: string) => {
+    if (!text.trim()) return;
+    setCards((current) => current.map((card) => (
+      card.id === cardId
+        ? { ...card, items: [...card.items, { id: Math.random().toString(36).slice(2, 10), text: text.trim(), done: false }] }
+        : card
+    )));
   }, []);
 
-  const deleteQuote = useCallback(async (id: string) => {
-    await fetch("/api/quotes", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+  const toggleCardItem = useCallback((cardId: string, itemId: string) => {
+    setCards((current) => current.map((card) => (
+      card.id === cardId
+        ? { ...card, items: card.items.map((item) => item.id === itemId ? { ...item, done: !item.done } : item) }
+        : card
+    )));
+  }, []);
+
+  const deleteCardItem = useCallback((cardId: string, itemId: string) => {
+    setCards((current) => current.map((card) => (
+      card.id === cardId
+        ? { ...card, items: card.items.filter((item) => item.id !== itemId) }
+        : card
+    )));
+  }, []);
+
+  const deleteCard = useCallback((cardId: string) => {
+    setCards((current) => current.filter((card) => card.id !== cardId));
+  }, []);
+
+  const startDrag = useCallback((card: CockpitPostcard, event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, textarea, a")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragState({
+      id: card.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: card.x,
+      originY: card.y,
     });
-    setRefreshTrigger((prev) => prev + 1);
+  }, []);
+
+  const moveDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragState || !boardRef.current) return;
+    const rect = boardRef.current.getBoundingClientRect();
+    const nextX = Math.max(12, Math.min(rect.width - 312, dragState.originX + event.clientX - dragState.startX));
+    const nextY = Math.max(12, Math.min(rect.height - 256, dragState.originY + event.clientY - dragState.startY));
+    setCards((current) => current.map((card) => card.id === dragState.id ? { ...card, x: nextX, y: nextY } : card));
+  }, [dragState]);
+
+  const endDrag = useCallback(() => {
+    setDragState(null);
   }, []);
 
   if (!data) return <LoadingPage />;
 
   const activeTask = data.TASKS.find(t => !t.done);
   const activeProblems = data.PROBLEMS.filter(p => !p.solved);
+  const upcomingEvent = [...data.BLOCKS]
+    .filter((block) => block.kind === "cal" && toMinutes(block.end) >= data.NOW_MIN)
+    .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))[0];
 
   return (
     <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <PageHeader active="cockpit" data={data} />
 
-      <main style={{ flex: 1, minHeight: 0, padding: "28px 40px 36px", boxSizing: "border-box" }}>
+      <main style={{ flex: 1, minHeight: 0, padding: "18px 28px 28px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 14 }}>
         <div
+          className="grid-card"
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(250px, 1fr) minmax(340px, 0.92fr) minmax(250px, 1fr)",
-            gridTemplateRows: "minmax(165px, 1fr) auto minmax(165px, 1fr)",
-            gap: 34,
-            height: "100%",
-            minHeight: 0,
-            overflowY: "auto",
-            overflowX: "hidden",
-            alignItems: "stretch",
-            justifyItems: "stretch",
-            padding: "0",
+            padding: "12px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 18,
+            flexShrink: 0,
           }}
         >
-          <div style={{ gridColumn: "2", gridRow: "2", alignSelf: "center", justifySelf: "stretch", zIndex: 2 }}>
-            <VisionBoard line={data.VISION_LINE} />
+          <div className="zine-eyebrow blue" style={{ flexShrink: 0 }}>
+            <span>↳ cockpit board</span>
+            <span>01</span>
           </div>
-
-          <div
-            className="grid-card"
-            style={{
-              gridColumn: "1",
-              gridRow: "3",
-              alignSelf: "stretch",
-              justifySelf: "stretch",
-              padding: "24px 26px",
-              display: "flex",
-              alignItems: "center",
-              gap: 18,
-              minHeight: 145,
-              flexShrink: 0,
-            }}
-          >
-            <div className="zine-paperclip" />
-            <div
+          <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.1, textAlign: "center", flex: 1 }}>
+            {data.VISION_LINE}
+          </div>
+          <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 8, width: 320, flexShrink: 0 }}>
+            <input
+              value={newCardTitle}
+              onChange={(e) => setNewCardTitle(e.target.value)}
+              placeholder="New postcard"
               style={{
-                width: 30,
-                height: 30,
-                border: "1.5px solid #0c0c0e",
-                borderRadius: 999,
+                flex: 1,
+                minWidth: 0,
+                background: "#ffffff",
+                border: "2px solid #000000",
+                padding: "9px 10px",
+                fontSize: 13,
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={!newCardTitle.trim()}
+              title="Add postcard"
+              style={{
+                width: 38,
+                height: 38,
+                background: "#0c0c0e",
+                color: "#faf9f6",
+                border: "none",
                 display: "grid",
                 placeItems: "center",
-                flexShrink: 0,
+                cursor: "pointer",
               }}
             >
-              <ArrowDown size={14} />
-            </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="zine-eyebrow blue" style={{ marginBottom: 6 }}>
-                <span>↳ focus target</span>
-                <span>02</span>
-              </div>
-              {activeTask ? (
-                <>
-                  <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {activeTask.title}
-                  </div>
-                  <div className="mono" style={{ fontSize: 8.5, color: "#66666a", marginTop: 3 }}>
-                    weight: <span style={{ fontWeight: 600, color: "#0c0c0e" }}>{weightForTask(activeTask.title)}</span> · due {activeTask.due || "today"}
-                  </div>
-                </>
-              ) : (
-                <div style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>
-                  No active focus targets
-                </div>
-              )}
-            </div>
-          </div>
+              <Plus size={16} />
+            </button>
+          </form>
+        </div>
 
-          <div style={{ gridColumn: "3", gridRow: "3", minHeight: 0, overflow: "hidden", alignSelf: "stretch", justifySelf: "stretch" }}>
-            <TodayScheduleCard data={data} />
-          </div>
-
-          <div style={{ gridColumn: "1", gridRow: "1", minHeight: 0, alignSelf: "stretch", justifySelf: "stretch" }}>
-            <div className="grid-card" style={{ minHeight: 0, height: "100%", padding: "22px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="zine-paperclip" />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexShrink: 0 }}>
-                <div className="zine-eyebrow">
-                  <span>↳ open problem space</span>
-                  <span>05</span>
-                </div>
-                <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>{activeProblems.length} items</span>
-              </div>
-
-              {/* Add-problem input */}
-              <form onSubmit={addProblem} style={{ flexShrink: 0, border: "2px solid #000000", background: "#ffffff", padding: "9px 12px" }}>
-                <input
-                  type="text"
-                  placeholder="Log new bottleneck + Hit Enter..."
-                  value={newProblem}
-                  onChange={(e) => setNewProblem(e.target.value)}
-                  style={{ border: "none", outline: "none", fontSize: 15, width: "100%", background: "transparent", color: "var(--text)", fontFamily: "inherit" }}
-                />
-              </form>
-
-              {/* Problems list */}
-              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", maxHeight: 190 }}>
-                {activeProblems.length === 0 ? (
-                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "8px 0", textAlign: "center" }}>
-                    all problems solved
-                  </div>
-                ) : (
-                  activeProblems.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "7px 0",
-                        borderBottom: "1px dashed #000000",
-                        fontSize: 12.5,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      <button
-                        onClick={() => solveProblem(p.id)}
-                        title="Mark solved"
-                        style={{
-                          width: 16,
-                          height: 16,
-                          border: "2px solid #000000",
-                          background: "none",
-                          cursor: "pointer",
-                          flexShrink: 0,
-                          padding: 0,
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>{p.text}</div>
+        <div
+          ref={boardRef}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          style={{
+            position: "relative",
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            border: "2px dashed rgba(12, 12, 14, 0.28)",
+            backgroundImage: "radial-gradient(rgba(12, 12, 14, 0.16) 1px, transparent 1px)",
+            backgroundSize: "28px 28px",
+            backgroundColor: "rgba(252, 251, 247, 0.44)",
+          }}
+        >
+          <div style={{ position: "relative", minWidth: 1120, minHeight: 760 }}>
+            <CockpitPostcardShell title="Next up" eyebrow="task / event" x={38} y={34} count="fixed">
+              <div style={{ padding: "14px 14px 12px", display: "flex", flexDirection: "column", gap: 14, background: "#fefeff", flex: 1 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <ArrowDown size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>next task</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1.18 }}>
+                      {activeTask ? activeTask.title : "No active focus task"}
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+                    {activeTask && (
+                      <div className="mono" style={{ fontSize: 9, color: "#66666a", marginTop: 4 }}>
+                        weight: {weightForTask(activeTask.title)} · due {activeTask.due || "today"}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-          <div style={{ gridColumn: "3", gridRow: "1", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "stretch", alignSelf: "stretch" }}>
-            <QuotesDeck
-              quotes={data.QUOTES}
-              onAddQuote={addQuote}
-              onDeleteQuote={deleteQuote}
-            />
+                <div style={{ borderTop: "1px dashed #000000", paddingTop: 12 }}>
+                  <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>next event</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.22 }}>
+                    {upcomingEvent ? upcomingEvent.label : "No upcoming event"}
+                  </div>
+                  {upcomingEvent && (
+                    <div className="mono" style={{ fontSize: 9, color: "#66666a", marginTop: 4 }}>
+                      {upcomingEvent.start} - {upcomingEvent.end}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CockpitPostcardShell>
+
+            <CockpitPostcardShell title="Problem space" eyebrow="open loops" x={38} y={324} count={`${activeProblems.length} items`}>
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fefeff" }}>
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  flex: 1,
+                  backgroundImage: "repeating-linear-gradient(#fcfbf7, #fcfbf7 27px, #e2e8f0 28px)",
+                  padding: "8px 10px 12px",
+                }}>
+                  {activeProblems.length === 0 ? (
+                    <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "22px 0", textAlign: "center" }}>
+                      all problems solved
+                    </div>
+                  ) : (
+                    activeProblems.map((problem) => (
+                      <div key={problem.id} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 28, borderBottom: "1px dashed #e2e8f0", fontSize: 13, lineHeight: 1.2 }}>
+                        <button
+                          onClick={() => solveProblem(problem.id)}
+                          title="Mark solved"
+                          style={{ width: 15, height: 15, border: "2px solid #000000", background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
+                        />
+                        <span>{problem.text}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <form onSubmit={addProblem} style={{ borderTop: "2px solid #000000", background: "#ffffff" }}>
+                  <input
+                    value={newProblem}
+                    onChange={(e) => setNewProblem(e.target.value)}
+                    placeholder="+ Add problem..."
+                    style={{ width: "100%", border: "none", outline: "none", padding: "10px 12px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
+                  />
+                </form>
+              </div>
+            </CockpitPostcardShell>
+
+            {cards.map((card) => (
+              <CockpitPostcardShell
+                key={card.id}
+                title={card.title}
+                eyebrow="postcard"
+                x={card.x}
+                y={card.y}
+                count={`${card.items.filter((item) => !item.done).length} open`}
+                onPointerDown={(event) => startDrag(card, event)}
+              >
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fefeff" }}>
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    flex: 1,
+                    minHeight: 130,
+                    backgroundImage: "repeating-linear-gradient(#fcfbf7, #fcfbf7 27px, #e2e8f0 28px)",
+                    padding: "8px 10px 12px",
+                  }}>
+                    {card.items.length === 0 ? (
+                      <div className="mono" style={{ fontSize: 10, color: "#888", textAlign: "center", padding: "20px 0" }}>
+                        Add what belongs here.
+                      </div>
+                    ) : (
+                      card.items.map((item) => (
+                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 28, borderBottom: "1px dashed #e2e8f0" }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleCardItem(card.id, item.id)}
+                            style={{
+                              width: 15,
+                              height: 15,
+                              border: "2px solid #000000",
+                              background: item.done ? "#7dd3fc" : "transparent",
+                              cursor: "pointer",
+                              display: "grid",
+                              placeItems: "center",
+                              padding: 0,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {item.done && <Check size={9} />}
+                          </button>
+                          <span style={{ flex: 1, fontSize: 13, lineHeight: 1.2, textDecoration: item.done ? "line-through" : "none", color: item.done ? "#777770" : "inherit" }}>
+                            {item.text}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => deleteCardItem(card.id, item.id)}
+                            title="Delete item"
+                            style={{ border: "none", background: "transparent", color: "#b24444", cursor: "pointer", padding: 2 }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", borderTop: "2px solid #000000", background: "#ffffff" }}>
+                    <input
+                      placeholder="+ Add item..."
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          addCardItem(card.id, event.currentTarget.value);
+                          event.currentTarget.value = "";
+                        }
+                      }}
+                      style={{ width: "100%", border: "none", outline: "none", padding: "10px 12px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => deleteCard(card.id)}
+                      title="Delete postcard"
+                      style={{ border: "none", borderLeft: "1px solid #000000", background: "#ffffff", color: "#b24444", padding: "0 10px", cursor: "pointer" }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </CockpitPostcardShell>
+            ))}
           </div>
         </div>
       </main>
