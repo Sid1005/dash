@@ -2539,61 +2539,7 @@ export function CockpitPage() {
     <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <PageHeader active="cockpit" data={data} />
 
-      <main style={{ flex: 1, minHeight: 0, padding: "18px 28px 28px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div
-          className="grid-card"
-          style={{
-            padding: "12px 18px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 18,
-            flexShrink: 0,
-          }}
-        >
-          <div className="zine-eyebrow blue" style={{ flexShrink: 0 }}>
-            <span>↳ cockpit board</span>
-            <span>01</span>
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.1, textAlign: "center", flex: 1 }}>
-            {data.VISION_LINE}
-          </div>
-          <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 8, width: 320, flexShrink: 0 }}>
-            <input
-              value={newCardTitle}
-              onChange={(e) => setNewCardTitle(e.target.value)}
-              placeholder="New postcard"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                background: "#ffffff",
-                border: "2px solid #000000",
-                padding: "9px 10px",
-                fontSize: 13,
-                fontFamily: "inherit",
-                outline: "none",
-              }}
-            />
-            <button
-              type="submit"
-              disabled={!newCardTitle.trim()}
-              title="Add postcard"
-              style={{
-                width: 38,
-                height: 38,
-                background: "#0c0c0e",
-                color: "#faf9f6",
-                border: "none",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
-              }}
-            >
-              <Plus size={16} />
-            </button>
-          </form>
-        </div>
-
+      <main style={{ flex: 1, minHeight: 0, padding: "18px 28px 28px", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
         <div
           ref={boardRef}
           onPointerMove={moveDrag}
@@ -2610,7 +2556,60 @@ export function CockpitPage() {
             backgroundColor: "rgba(252, 251, 247, 0.32)",
           }}
         >
-          <div style={{ position: "relative", minWidth: 1120, minHeight: 760 }}>
+          <div style={{ position: "relative", minWidth: 1120, minHeight: 840 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "170px minmax(280px, 1fr) 380px",
+                alignItems: "center",
+                gap: 24,
+                padding: "24px 32px 20px",
+              }}
+            >
+              <div className="zine-eyebrow blue" style={{ width: "fit-content" }}>
+                <span>↳ cockpit board</span>
+                <span>01</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.05, textAlign: "center", maxWidth: 460, justifySelf: "center" }}>
+                {data.VISION_LINE}
+              </div>
+              <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", justifySelf: "end" }}>
+                <input
+                  value={newCardTitle}
+                  onChange={(e) => setNewCardTitle(e.target.value)}
+                  placeholder="New postcard"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: "#ffffff",
+                    border: "2px solid #000000",
+                    padding: "12px 14px",
+                    fontSize: 14,
+                    fontFamily: "inherit",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!newCardTitle.trim()}
+                  title="Add postcard"
+                  style={{
+                    width: 44,
+                    height: 44,
+                    background: "#0c0c0e",
+                    color: "#faf9f6",
+                    border: "none",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                  }}
+                >
+                  <Plus size={18} />
+                </button>
+              </form>
+            </div>
+
+            <div style={{ position: "relative", minHeight: 720 }}>
             <CockpitPostcardShell
               title="Next up"
               eyebrow="task / event"
@@ -2772,6 +2771,7 @@ export function CockpitPage() {
                 </div>
               </CockpitPostcardShell>
             ))}
+            </div>
           </div>
         </div>
       </main>
