@@ -691,8 +691,14 @@ function Nav({ active }: { active: NavItemId }) {
 }
 
 export function PageHeader({ active, data }: { active: NavItemId; data: DashData | null }) {
-  const now = data?.NOW_MIN ?? nowMinutes();
-  const t = `${String(Math.floor(now / 60)).padStart(2, "0")}:${String(now % 60).padStart(2, "0")}`;
+  const [clientNow, setClientNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setClientNow(nowMinutes());
+  }, []);
+
+  const now = data?.NOW_MIN ?? clientNow;
+  const t = now === null ? "--:--" : `${String(Math.floor(now / 60)).padStart(2, "0")}:${String(now % 60).padStart(2, "0")}`;
   return (
     <header
       style={{
