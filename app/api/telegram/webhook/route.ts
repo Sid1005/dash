@@ -15,6 +15,8 @@ import {
 import { clearPending, getPending, setPending } from "@/lib/telegram-pending";
 import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 import { getDefaultOwnerDb } from "@/lib/owner-scope";
+import { answerPersonalQuestion, classifyTelegramIntent } from "@/lib/intelligence";
+import { type ParsedAction } from "@/lib/parse";
 
 /** Extend invocation until `after()` tasks finish (LLM + Telegram API). */
 export const maxDuration = 60;
@@ -108,6 +110,18 @@ async function processMessage(
         await sendTelegramMessage(chatId, `✓ ${message}`);
         return;
       }
+
+      const intent = await classifyTelegramIntent(text, `${today} ${now} (${weekday})`);
+      if (intent.intent === "question") {
+        const answer = await answerPersonalQuestion(
+          text,
+          `${today} ${now} (${weekday})`,
+          today,
+          await getDefaultOwnerDb()
+        );
+        await sendTelegramMessage(chatId, answer);
+        return;
+      }
     }
 
     const pending = await getPending(chatId);
@@ -136,8 +150,11 @@ async function processMessage(
         return;
       }
       history.push(`AI: ${action.data.response}`);
-      // Cast to any to bypass strict type check for now since we added history
-      await setPending(chatId, { type: "chat", data: { history, response: action.data.response } } as any, today);
+      const chatAction: ParsedAction = {
+        type: "chat",
+        data: { history, response: action.data.response },
+      };
+      await setPending(chatId, chatAction, today);
       await sendTelegramMessage(chatId, action.data.response as string);
       return;
     }
