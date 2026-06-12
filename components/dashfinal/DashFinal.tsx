@@ -145,6 +145,10 @@ type CockpitPostcard = {
   items: CockpitCardItem[];
 };
 
+type SystemPostcardId = "next" | "problems";
+
+type SystemPostcardPositions = Record<SystemPostcardId, { x: number; y: number }>;
+
 // ── Day timeline ──────────────────────────────────────────────────────────────
 const TL_START = 6 * 60;   // 6:00 AM
 const TL_END   = 23 * 60;  // 11:00 PM
@@ -654,7 +658,6 @@ export function Eyebrow({
 
 const NAV_ITEMS = [
   { id: "cockpit", label: "cockpit", href: "/" },
-  { id: "scratchpad", label: "scratchpad", href: "/scratchpad" },
   { id: "tasks", label: "tasks & learning", href: "/tasks" },
   { id: "activities", label: "activities", href: "/activities" },
   { id: "calendar", label: "calendar", href: "/calendar" },
@@ -663,7 +666,9 @@ const NAV_ITEMS = [
   { id: "ideas", label: "ideas", href: "/ideas" },
 ];
 
-function Nav({ active }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas" | "scratchpad" }) {
+type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas";
+
+function Nav({ active }: { active: NavItemId }) {
   return (
     <nav style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
       {NAV_ITEMS.map((item) => (
@@ -685,7 +690,7 @@ function Nav({ active }: { active: "cockpit" | "calendar" | "tasks" | "food" | "
   );
 }
 
-export function PageHeader({ active, data }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas" | "scratchpad"; data: DashData | null }) {
+export function PageHeader({ active, data }: { active: NavItemId; data: DashData | null }) {
   const now = data?.NOW_MIN ?? nowMinutes();
   const t = `${String(Math.floor(now / 60)).padStart(2, "0")}:${String(now % 60).padStart(2, "0")}`;
   return (
@@ -2293,6 +2298,13 @@ function createDefaultCockpitCards(): CockpitPostcard[] {
   ];
 }
 
+function createDefaultSystemPostcardPositions(): SystemPostcardPositions {
+  return {
+    next: { x: 38, y: 34 },
+    problems: { x: 38, y: 324 },
+  };
+}
+
 function CockpitPostcardShell({
   title,
   eyebrow,
@@ -2318,40 +2330,39 @@ function CockpitPostcardShell({
         left: x,
         top: y,
         width: 292,
-        minHeight: 238,
+        minHeight: 220,
         padding: 0,
         overflow: "hidden",
-        background: "#fcfbf7",
+        background: "#fffdf5",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      <div className="zine-paperclip" />
       <div
         onPointerDown={onPointerDown}
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 10,
+          gap: 12,
           borderBottom: "2px solid #000000",
           background: "#fef08a",
-          padding: "10px 12px",
+          padding: "12px 14px",
           cursor: onPointerDown ? "grab" : "default",
           touchAction: "none",
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div className="mono" style={{ fontSize: 9, fontWeight: 900, textTransform: "uppercase", color: "#0c0c0e" }}>
+          <div className="mono" style={{ fontSize: 8.5, fontWeight: 900, textTransform: "uppercase", color: "#0c0c0e", marginBottom: 3 }}>
             ↳ {eyebrow}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {title}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {count && <span className="mono" style={{ fontSize: 10 }}>{count}</span>}
-          {onPointerDown && <GripVertical size={14} />}
+          {count && <span className="mono" style={{ fontSize: 11 }}>{count}</span>}
+          {onPointerDown && <GripVertical size={15} />}
         </div>
       </div>
       {children}
@@ -2365,8 +2376,11 @@ export function CockpitPage() {
   const [newCardTitle, setNewCardTitle] = useState("");
   const [cards, setCards] = useState<CockpitPostcard[]>([]);
   const [cardsLoaded, setCardsLoaded] = useState(false);
+  const [systemPositions, setSystemPositions] = useState<SystemPostcardPositions>(createDefaultSystemPostcardPositions);
+  const [systemPositionsLoaded, setSystemPositionsLoaded] = useState(false);
   const [dragState, setDragState] = useState<{
     id: string;
+    kind: "user" | "system";
     startX: number;
     startY: number;
     originX: number;
@@ -2388,9 +2402,26 @@ export function CockpitPage() {
   }, []);
 
   useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("dash_cockpit_system_postcards_v1");
+      const parsed = saved ? JSON.parse(saved) as Partial<SystemPostcardPositions> : null;
+      setSystemPositions({ ...createDefaultSystemPostcardPositions(), ...parsed });
+    } catch {
+      setSystemPositions(createDefaultSystemPostcardPositions());
+    } finally {
+      setSystemPositionsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!cardsLoaded) return;
     window.localStorage.setItem("dash_cockpit_postcards_v1", JSON.stringify(cards));
   }, [cards, cardsLoaded]);
+
+  useEffect(() => {
+    if (!systemPositionsLoaded) return;
+    window.localStorage.setItem("dash_cockpit_system_postcards_v1", JSON.stringify(systemPositions));
+  }, [systemPositions, systemPositionsLoaded]);
 
   const solveProblem = useCallback(async (id: string) => {
     await fetch(`/api/problems/${id}`, {
@@ -2457,16 +2488,21 @@ export function CockpitPage() {
     setCards((current) => current.filter((card) => card.id !== cardId));
   }, []);
 
-  const startDrag = useCallback((card: CockpitPostcard, event: ReactPointerEvent<HTMLDivElement>) => {
+  const startDrag = useCallback((
+    item: { id: string; x: number; y: number },
+    kind: "user" | "system",
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, input, textarea, a")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragState({
-      id: card.id,
+      id: item.id,
+      kind,
       startX: event.clientX,
       startY: event.clientY,
-      originX: card.x,
-      originY: card.y,
+      originX: item.x,
+      originY: item.y,
     });
   }, []);
 
@@ -2475,6 +2511,15 @@ export function CockpitPage() {
     const rect = boardRef.current.getBoundingClientRect();
     const nextX = Math.max(12, Math.min(rect.width - 312, dragState.originX + event.clientX - dragState.startX));
     const nextY = Math.max(12, Math.min(rect.height - 256, dragState.originY + event.clientY - dragState.startY));
+    if (dragState.kind === "system") {
+      const systemId = dragState.id as SystemPostcardId;
+      setSystemPositions((current) => ({
+        ...current,
+        [systemId]: { x: nextX, y: nextY },
+      }));
+      return;
+    }
+
     setCards((current) => current.map((card) => card.id === dragState.id ? { ...card, x: nextX, y: nextY } : card));
   }, [dragState]);
 
@@ -2559,19 +2604,26 @@ export function CockpitPage() {
             flex: 1,
             minHeight: 0,
             overflow: "auto",
-            border: "2px dashed rgba(12, 12, 14, 0.28)",
-            backgroundImage: "radial-gradient(rgba(12, 12, 14, 0.16) 1px, transparent 1px)",
+            border: "1px solid rgba(12, 12, 14, 0.16)",
+            backgroundImage: "radial-gradient(rgba(12, 12, 14, 0.12) 1px, transparent 1px)",
             backgroundSize: "28px 28px",
-            backgroundColor: "rgba(252, 251, 247, 0.44)",
+            backgroundColor: "rgba(252, 251, 247, 0.32)",
           }}
         >
           <div style={{ position: "relative", minWidth: 1120, minHeight: 760 }}>
-            <CockpitPostcardShell title="Next up" eyebrow="task / event" x={38} y={34} count="fixed">
-              <div style={{ padding: "14px 14px 12px", display: "flex", flexDirection: "column", gap: 14, background: "#fefeff", flex: 1 }}>
+            <CockpitPostcardShell
+              title="Next up"
+              eyebrow="task / event"
+              x={systemPositions.next.x}
+              y={systemPositions.next.y}
+              count="move"
+              onPointerDown={(event) => startDrag({ id: "next", ...systemPositions.next }, "system", event)}
+            >
+              <div style={{ padding: "16px 16px 14px", display: "flex", flexDirection: "column", gap: 16, background: "#fffdf8", flex: 1 }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                   <ArrowDown size={16} style={{ marginTop: 2, flexShrink: 0 }} />
                   <div style={{ minWidth: 0 }}>
-                    <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>next task</div>
+                    <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", marginBottom: 3 }}>next task</div>
                     <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1.18 }}>
                       {activeTask ? activeTask.title : "No active focus task"}
                     </div>
@@ -2583,8 +2635,8 @@ export function CockpitPage() {
                   </div>
                 </div>
 
-                <div style={{ borderTop: "1px dashed #000000", paddingTop: 12 }}>
-                  <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>next event</div>
+                <div style={{ borderTop: "1px solid rgba(12, 12, 14, 0.12)", paddingTop: 14 }}>
+                  <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", marginBottom: 3 }}>next event</div>
                   <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.22 }}>
                     {upcomingEvent ? upcomingEvent.label : "No upcoming event"}
                   </div>
@@ -2597,14 +2649,20 @@ export function CockpitPage() {
               </div>
             </CockpitPostcardShell>
 
-            <CockpitPostcardShell title="Problem space" eyebrow="open loops" x={38} y={324} count={`${activeProblems.length} items`}>
-              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fefeff" }}>
+            <CockpitPostcardShell
+              title="Problem space"
+              eyebrow="open loops"
+              x={systemPositions.problems.x}
+              y={systemPositions.problems.y}
+              count={`${activeProblems.length} items`}
+              onPointerDown={(event) => startDrag({ id: "problems", ...systemPositions.problems }, "system", event)}
+            >
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fffdf8" }}>
                 <div style={{
                   display: "flex",
                   flexDirection: "column",
                   flex: 1,
-                  backgroundImage: "repeating-linear-gradient(#fcfbf7, #fcfbf7 27px, #e2e8f0 28px)",
-                  padding: "8px 10px 12px",
+                  padding: "10px 12px 12px",
                 }}>
                   {activeProblems.length === 0 ? (
                     <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "22px 0", textAlign: "center" }}>
@@ -2612,23 +2670,23 @@ export function CockpitPage() {
                     </div>
                   ) : (
                     activeProblems.map((problem) => (
-                      <div key={problem.id} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 28, borderBottom: "1px dashed #e2e8f0", fontSize: 13, lineHeight: 1.2 }}>
+                      <div key={problem.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, borderBottom: "1px solid rgba(12, 12, 14, 0.08)", fontSize: 13, lineHeight: 1.25 }}>
                         <button
                           onClick={() => solveProblem(problem.id)}
                           title="Mark solved"
-                          style={{ width: 15, height: 15, border: "2px solid #000000", background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
+                          style={{ width: 16, height: 16, border: "2px solid #000000", background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
                         />
                         <span>{problem.text}</span>
                       </div>
                     ))
                   )}
                 </div>
-                <form onSubmit={addProblem} style={{ borderTop: "2px solid #000000", background: "#ffffff" }}>
+                <form onSubmit={addProblem} style={{ borderTop: "1px solid rgba(12, 12, 14, 0.18)", background: "#ffffff" }}>
                   <input
                     value={newProblem}
                     onChange={(e) => setNewProblem(e.target.value)}
                     placeholder="+ Add problem..."
-                    style={{ width: "100%", border: "none", outline: "none", padding: "10px 12px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
+                    style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
                   />
                 </form>
               </div>
@@ -2642,16 +2700,15 @@ export function CockpitPage() {
                 x={card.x}
                 y={card.y}
                 count={`${card.items.filter((item) => !item.done).length} open`}
-                onPointerDown={(event) => startDrag(card, event)}
+                onPointerDown={(event) => startDrag(card, "user", event)}
               >
-                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fefeff" }}>
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fffdf8" }}>
                   <div style={{
                     display: "flex",
                     flexDirection: "column",
                     flex: 1,
                     minHeight: 130,
-                    backgroundImage: "repeating-linear-gradient(#fcfbf7, #fcfbf7 27px, #e2e8f0 28px)",
-                    padding: "8px 10px 12px",
+                    padding: "10px 12px 12px",
                   }}>
                     {card.items.length === 0 ? (
                       <div className="mono" style={{ fontSize: 10, color: "#888", textAlign: "center", padding: "20px 0" }}>
@@ -2659,13 +2716,13 @@ export function CockpitPage() {
                       </div>
                     ) : (
                       card.items.map((item) => (
-                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 28, borderBottom: "1px dashed #e2e8f0" }}>
+                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, borderBottom: "1px solid rgba(12, 12, 14, 0.08)" }}>
                           <button
                             type="button"
                             onClick={() => toggleCardItem(card.id, item.id)}
                             style={{
-                              width: 15,
-                              height: 15,
+                              width: 16,
+                              height: 16,
                               border: "2px solid #000000",
                               background: item.done ? "#7dd3fc" : "transparent",
                               cursor: "pointer",
@@ -2692,7 +2749,7 @@ export function CockpitPage() {
                       ))
                     )}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", borderTop: "2px solid #000000", background: "#ffffff" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", borderTop: "1px solid rgba(12, 12, 14, 0.18)", background: "#ffffff" }}>
                     <input
                       placeholder="+ Add item..."
                       onKeyDown={(event) => {
@@ -2701,13 +2758,13 @@ export function CockpitPage() {
                           event.currentTarget.value = "";
                         }
                       }}
-                      style={{ width: "100%", border: "none", outline: "none", padding: "10px 12px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
+                      style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
                     />
                     <button
                       type="button"
                       onClick={() => deleteCard(card.id)}
                       title="Delete postcard"
-                      style={{ border: "none", borderLeft: "1px solid #000000", background: "#ffffff", color: "#b24444", padding: "0 10px", cursor: "pointer" }}
+                      style={{ border: "none", background: "#ffffff", color: "#b24444", padding: "0 12px", cursor: "pointer" }}
                     >
                       <Trash2 size={14} />
                     </button>

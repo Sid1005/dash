@@ -476,7 +476,6 @@ export default function CockpitDemoPage() {
 
           <nav className="theme-nav">
             <span className="nav-item active">cockpit</span>
-            <span className="nav-item">scratchpad</span>
             <span className="nav-item">tasks & learning</span>
             <span className="nav-item">activities</span>
             <span className="nav-item">calendar</span>
