@@ -2309,32 +2309,32 @@ export function CockpitPage() {
     <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <PageHeader active="cockpit" data={data} />
 
-      <main style={{ flex: 1, minHeight: 0, padding: "32px 32px 40px", boxSizing: "border-box" }}>
+      <main style={{ flex: 1, minHeight: 0, padding: "28px 40px 36px", boxSizing: "border-box" }}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(240px, 0.92fr) minmax(340px, 1.12fr) minmax(260px, 0.96fr)",
-            gridTemplateRows: "minmax(150px, auto) minmax(230px, auto) minmax(190px, auto)",
-            columnGap: 28,
-            rowGap: 22,
+            gridTemplateColumns: "minmax(250px, 1fr) minmax(340px, 0.92fr) minmax(250px, 1fr)",
+            gridTemplateRows: "minmax(165px, 1fr) auto minmax(165px, 1fr)",
+            gap: 34,
             height: "100%",
             minHeight: 0,
             overflowY: "auto",
             overflowX: "hidden",
-            alignItems: "center",
-            padding: "0 8px 20px",
+            alignItems: "stretch",
+            justifyItems: "stretch",
+            padding: "0",
           }}
         >
-          <div style={{ gridColumn: "2 / span 1", gridRow: "1 / span 2", alignSelf: "center", justifySelf: "stretch", zIndex: 2 }}>
+          <div style={{ gridColumn: "2", gridRow: "2", alignSelf: "center", justifySelf: "stretch", zIndex: 2 }}>
             <VisionBoard line={data.VISION_LINE} />
           </div>
 
           <div
             className="grid-card"
             style={{
-              gridColumn: "1 / span 1",
-              gridRow: "2 / span 1",
-              alignSelf: "center",
+              gridColumn: "1",
+              gridRow: "3",
+              alignSelf: "stretch",
               justifySelf: "stretch",
               padding: "24px 26px",
               display: "flex",
@@ -2380,12 +2380,12 @@ export function CockpitPage() {
             </div>
           </div>
 
-          <div style={{ gridColumn: "1 / span 1", gridRow: "1 / span 1", minHeight: 0, overflow: "hidden", alignSelf: "end", justifySelf: "stretch", transform: "translateY(12px)" }}>
+          <div style={{ gridColumn: "3", gridRow: "3", minHeight: 0, overflow: "hidden", alignSelf: "stretch", justifySelf: "stretch" }}>
             <TodayScheduleCard data={data} />
           </div>
 
-          <div style={{ gridColumn: "2 / span 1", gridRow: "3 / span 1", minHeight: 0, alignSelf: "start", justifySelf: "stretch", transform: "translateY(-10px)" }}>
-            <div className="grid-card" style={{ minHeight: 0, padding: "22px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ gridColumn: "1", gridRow: "1", minHeight: 0, alignSelf: "stretch", justifySelf: "stretch" }}>
+            <div className="grid-card" style={{ minHeight: 0, height: "100%", padding: "22px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="zine-paperclip" />
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexShrink: 0 }}>
                 <div className="zine-eyebrow">
@@ -2447,7 +2447,7 @@ export function CockpitPage() {
             </div>
           </div>
 
-          <div style={{ gridColumn: "3 / span 1", gridRow: "2 / span 2", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", alignSelf: "center", transform: "translateY(16px)" }}>
+          <div style={{ gridColumn: "3", gridRow: "1", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "stretch", alignSelf: "stretch" }}>
             <QuotesDeck
               quotes={data.QUOTES}
               onAddQuote={addQuote}
