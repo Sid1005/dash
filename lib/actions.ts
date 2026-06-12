@@ -7,7 +7,7 @@ import { classifyIdea } from "./classify-idea";
 import { insertFoodEntry } from "./food-supabase";
 import { insertActivity } from "./activities-supabase";
 import { insertTimeBlock } from "./time-blocks-supabase";
-import { createAdminClient } from "./supabase/admin";
+import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
 import { currentIstDate } from "./time";
 
@@ -53,7 +53,8 @@ function formatDateLabel(dateStr?: string): string {
 
 async function insertTaskEntry(
   baseDate: string,
-  taskData: { title: string; due_date?: string; due_time?: string; due_in_minutes?: number }
+  taskData: { title: string; due_date?: string; due_time?: string; due_in_minutes?: number },
+  scope: DbScope
 ): Promise<{ title: string; label: string }> {
   const title = taskData.title ?? "Untitled task";
   const rawDue = taskData.due_date ?? "today";
@@ -88,10 +89,9 @@ async function insertTaskEntry(
     }
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
+  const { error } = await scope.supabase
     .from("tasks")
-    .insert({ title, due_at: dueDate.toISOString(), done: false });
+    .insert({ owner_user_id: scope.ownerUserId, title, due_at: dueDate.toISOString(), done: false });
   if (error) throw new Error(error.message);
 
   const label =
@@ -108,14 +108,16 @@ async function insertTaskEntry(
 
 export async function applyParsedAction(
   action: ParsedAction,
-  date: string
+  date: string,
+  scope?: DbScope
 ): Promise<string> {
+  const dbScope = scope ?? await getUserScopedDb();
   const { type, data = {} } = action;
   const targetDate = (data.date as string) || date;
 
   if (type === "food") {
     const entry = data as unknown as FoodEntry;
-    await insertFoodEntry(targetDate, entry);
+    await insertFoodEntry(targetDate, entry, dbScope);
     const est = entry.estimated ? " (estimated)" : "";
     return `Logged ${entry.name}: ${entry.calories} cal, ${entry.protein_g}g protein${est}`;
   }
@@ -125,7 +127,7 @@ export async function applyParsedAction(
       ...(data as unknown as SpendEntry),
       category: normalizeSpendCategory((data.category as string) ?? "Other"),
     };
-    await insertSpending(targetDate, entry);
+    await insertSpending(targetDate, entry, dbScope);
     return `Logged ₹${entry.amount} for ${entry.item}`;
   }
 
@@ -138,7 +140,7 @@ export async function applyParsedAction(
           amount: e.amount,
           category: normalizeSpendCategory(e.category ?? "Other"),
           time: e.time ?? "00:00",
-        })
+        }, dbScope)
       )
     );
     return saved.map((s) => `₹${s.amount} for ${s.item}`).join(" · ");
@@ -150,54 +152,54 @@ export async function applyParsedAction(
       ...(data.spending as unknown as SpendEntry),
       category: normalizeSpendCategory(((data.spending as Record<string, unknown>)?.category as string) ?? "Food"),
     };
-    await insertFoodEntry(targetDate, f);
-    await insertSpending(targetDate, s);
+    await insertFoodEntry(targetDate, f, dbScope);
+    await insertSpending(targetDate, s, dbScope);
     const est = f.estimated ? " (estimated)" : "";
     return `Logged ${f.name}: ${f.calories} cal, ${f.protein_g}g protein${est} · ₹${s.amount}`;
   }
 
   if (type === "time_block") {
     const block = data as unknown as TimeBlock;
-    const saved = await insertTimeBlock(targetDate, block);
+    const saved = await insertTimeBlock(targetDate, block, dbScope);
     return `Logged ${saved.start}–${saved.end}: ${saved.activity}`;
   }
 
   if (type === "time_blocks") {
     const blocks = (data.blocks ?? []) as Array<{ start: string; end: string; activity: string; category?: string }>;
-    const saved = await Promise.all(blocks.map((b) => insertTimeBlock(targetDate, b)));
+    const saved = await Promise.all(blocks.map((b) => insertTimeBlock(targetDate, b, dbScope)));
     return saved.map((s) => `${s.start}–${s.end}: ${s.activity}`).join(" · ");
   }
 
   if (type === "task") {
-    const { title, label } = await insertTaskEntry(targetDate, data as any);
+    const { title, label } = await insertTaskEntry(targetDate, data as any, dbScope);
     return `Task added: "${title}" due ${label}`;
   }
 
   if (type === "tasks") {
     const tasks = (data.tasks ?? []) as Array<{ title: string; due_date?: string; due_time?: string; due_in_minutes?: number }>;
     const saved = await Promise.all(
-      tasks.map((t) => insertTaskEntry(targetDate, t))
+      tasks.map((t) => insertTaskEntry(targetDate, t, dbScope))
     );
     return saved.map((s) => `"${s.title}" due ${s.label}`).join(" · ");
   }
 
   if (type === "learning") {
     const text = extractText(data);
-    await insertLearning(targetDate, text);
+    await insertLearning(targetDate, text, dbScope);
     return `Learning logged: "${text.slice(0, 60)}"`;
   }
 
   if (type === "idea") {
     const text = extractText(data);
-    const existingCategories = await listUniqueCategories();
+    const existingCategories = await listUniqueCategories(dbScope);
     const category = await classifyIdea(text, existingCategories);
-    const idea = await insertIdea(text, category);
+    const idea = await insertIdea(text, category, dbScope);
     return `Idea logged under "${idea.category}": "${text.slice(0, 60)}"`;
   }
 
   if (type === "problem") {
     const text = extractText(data);
-    await insertProblem(text);
+    await insertProblem(text, dbScope);
     return `Problem logged: "${text.slice(0, 60)}"`;
   }
 
@@ -206,12 +208,10 @@ export async function applyParsedAction(
     type Exercise = { name: string; sets: ExerciseSet[]; notes?: string };
     const workoutDate = (data.date as string) || targetDate;
     const exercises = (data.exercises as Exercise[]) ?? [];
-    const supabase = createAdminClient();
-
     // Insert workout row
-    const { data: wk, error: wkErr } = await supabase
+    const { data: wk, error: wkErr } = await dbScope.supabase
       .from("workouts")
-      .insert({ occurred_date: workoutDate })
+      .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate })
       .select("id")
       .single();
     if (wkErr) throw new Error(wkErr.message);
@@ -220,6 +220,7 @@ export async function applyParsedAction(
     const setRows = exercises.flatMap((ex, _i) =>
       ex.sets.map((s, si) => ({
         workout_id: wk.id,
+        owner_user_id: dbScope.ownerUserId,
         exercise_name: ex.name,
         set_number: si + 1,
         reps: s.reps,
@@ -228,7 +229,7 @@ export async function applyParsedAction(
       }))
     );
     if (setRows.length > 0) {
-      const { error: exErr } = await supabase.from("workout_exercises").insert(setRows);
+      const { error: exErr } = await dbScope.supabase.from("workout_exercises").insert(setRows);
       if (exErr) throw new Error(exErr.message);
     }
 
@@ -251,18 +252,19 @@ export async function applyParsedAction(
     verb: "noted",
     body: text,
     time: typeof data.time === "string" ? data.time : undefined,
-  });
+  }, dbScope);
   return `Activity noted: "${text.slice(0, 60)}"`;
 }
 
 export async function handleNaturalLanguage(
   input: string,
   date: string,
-  now: string
+  now: string,
+  scope?: DbScope
 ): Promise<{ action: ParsedAction; message: string }> {
   const combinedNow = `${date} ${now}`;
   const action = await parseInput(input, combinedNow);
-  const message = await applyParsedAction(action, date);
+  const message = await applyParsedAction(action, date, scope);
   return { action, message };
 }
 

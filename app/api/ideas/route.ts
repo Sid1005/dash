@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listActiveIdeas, listAllIdeas, insertIdea, listUniqueCategories } from "@/lib/ideas-supabase";
 import { classifyIdea } from "@/lib/classify-idea";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 export async function GET(req: NextRequest) {
   try {
     const showAll = req.nextUrl.searchParams.get("all") === "true";
-    const ideas = showAll ? await listAllIdeas() : await listActiveIdeas();
+    const scope = await getUserScopedDb();
+    const ideas = showAll ? await listAllIdeas(scope) : await listActiveIdeas(scope);
     return NextResponse.json({ ideas });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -21,12 +23,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch existing categories to let LLM decide if it fits any of them
-    const existingCategories = await listUniqueCategories();
+    const scope = await getUserScopedDb();
+    const existingCategories = await listUniqueCategories(scope);
     
     // Classify the idea text dynamically
     const category = await classifyIdea(text.trim(), existingCategories);
     
-    const idea = await insertIdea(text.trim(), category);
+    const idea = await insertIdea(text.trim(), category, scope);
     return NextResponse.json({ idea });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

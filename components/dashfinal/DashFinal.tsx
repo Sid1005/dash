@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { format, parseISO, subDays } from "date-fns";
 import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check } from "lucide-react";
 
@@ -482,7 +483,7 @@ export function useDashData(
           dateLong: format(new Date(`${today}T12:00:00`), "EEEE, MMMM d, yyyy"),
         },
         FOCUS: { title: taskRows[0]?.title ?? "Choose the next important task." },
-        VISION_LINE: "Build tools that make one person feel like a team of ten.",
+        VISION_LINE: "Do what I truly want and be who I am meant to be.",
         PROBLEMS: problemsRes.problems ?? [],
         BLOCKS: blocks,
         TASKS: taskRows,
@@ -732,12 +733,24 @@ export function DateNavigator({
   compact?: boolean;
 }) {
   const [showMonthGrid, setShowMonthGrid] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [calendarPosition, setCalendarPosition] = useState<{ top: number; left: number } | null>(null);
   const calendarDialogRef = useRef<HTMLDivElement>(null);
+  const calendarButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close month calendar when clicking outside
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (calendarDialogRef.current && !calendarDialogRef.current.contains(event.target as Node)) {
+      if (
+        calendarDialogRef.current &&
+        !calendarDialogRef.current.contains(event.target as Node) &&
+        calendarButtonRef.current &&
+        !calendarButtonRef.current.contains(event.target as Node)
+      ) {
         setShowMonthGrid(false);
       }
     }
@@ -799,6 +812,21 @@ export function DateNavigator({
     onChange(localIsoDate(d));
   };
 
+  const toggleMonthGrid = () => {
+    if (!calendarButtonRef.current) {
+      setShowMonthGrid((show) => !show);
+      return;
+    }
+
+    const rect = calendarButtonRef.current.getBoundingClientRect();
+    const dropdownWidth = 250;
+    setCalendarPosition({
+      top: rect.bottom + 8,
+      left: Math.min(window.innerWidth - dropdownWidth - 12, Math.max(12, rect.right - dropdownWidth)),
+    });
+    setShowMonthGrid((show) => !show);
+  };
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 16, position: "relative", maxWidth: "100%" }}>
       {/* Week selector strip */}
@@ -848,8 +876,9 @@ export function DateNavigator({
 
       {/* Calendar icon trigger */}
       <button
+        ref={calendarButtonRef}
         type="button"
-        onClick={() => setShowMonthGrid(!showMonthGrid)}
+        onClick={toggleMonthGrid}
         style={{
           width: compact ? 34 : 38,
           height: compact ? 34 : 38,
@@ -866,19 +895,19 @@ export function DateNavigator({
       </button>
 
       {/* Monthly grid calendar dropdown */}
-      {showMonthGrid && (
+      {mounted && showMonthGrid && calendarPosition && createPortal(
         <div
           ref={calendarDialogRef}
           style={{
-            position: "absolute",
-            top: "46px",
-            right: 0,
+            position: "fixed",
+            top: calendarPosition.top,
+            left: calendarPosition.left,
             width: 250,
             border: "1px solid var(--text)",
             backgroundColor: "var(--bg)",
             padding: 16,
             boxShadow: "4px 4px 0px var(--text)",
-            zIndex: 200
+            zIndex: 10000
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -931,7 +960,8 @@ export function DateNavigator({
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1783,22 +1813,15 @@ function ActiveProblems({ data, onSolve }: { data: DashData; onSolve: (id: strin
 }
 
 function VisionBoard({ line }: { line: string }) {
-  const visionItems = [
-    { title: "✦ MONEY", text: "Nothing too expensive. Enough to never think about cost." },
-    { title: "✦ WORK", text: "Exciting work. Excited on a Monday morning." },
-    { title: "✦ PEOPLE", text: "People I admire, grow with. A small, tight circle." },
-    { title: "✦ LIFE", text: "Travel. Rich experiences, and absolute freedom." }
-  ];
-
   return (
     <div
       className="grid-card"
       style={{
-        padding: "24px 26px 24px",
+        padding: "30px 32px 34px",
         height: "auto",
         display: "flex",
         flexDirection: "column",
-        gap: 14,
+        gap: 24,
         overflow: "visible",
       }}
     >
@@ -1810,24 +1833,16 @@ function VisionBoard({ line }: { line: string }) {
       <div
         style={{
           borderLeft: "6px solid #000000",
-          paddingLeft: 12,
-          fontSize: 18,
-          lineHeight: 1.3,
+          paddingLeft: 16,
+          fontSize: 26,
+          lineHeight: 1.18,
           fontWeight: 900,
           letterSpacing: 0,
           maxWidth: 660,
-          textTransform: "uppercase",
+          textTransform: "none",
         }}
       >
-        "{line}"
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, rowGap: 14 }}>
-        {visionItems.map((v, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span className="mono" style={{ fontSize: 13, color: "#000000", fontWeight: 900 }}>{v.title}</span>
-            <span style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.25 }}>{v.text}</span>
-          </div>
-        ))}
+        {line}
       </div>
     </div>
   );
@@ -2244,7 +2259,7 @@ function QuotesDeck({
 export function CockpitPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [newProblem, setNewProblem] = useState("");
-  const data = useDashData(undefined, refreshTrigger);
+  const data = useDashData(undefined, refreshTrigger, { includeLearnings: false });
 
   const solveProblem = useCallback(async (id: string) => {
     await fetch(`/api/problems/${id}`, {
@@ -2298,81 +2313,79 @@ export function CockpitPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1.15fr) minmax(0, 1.05fr)",
-            gap: 32,
+            gridTemplateColumns: "minmax(240px, 0.92fr) minmax(340px, 1.12fr) minmax(260px, 0.96fr)",
+            gridTemplateRows: "minmax(150px, auto) minmax(230px, auto) minmax(190px, auto)",
+            columnGap: 28,
+            rowGap: 22,
             height: "100%",
             minHeight: 0,
-            overflow: "hidden",
+            overflowY: "auto",
+            overflowX: "hidden",
+            alignItems: "center",
+            padding: "0 8px 20px",
           }}
         >
-          {/* COLUMN 1: VISION, FOCUS TARGET & BREATHE */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%", minHeight: 0 }}>
-            {/* Vision Board */}
-            <div style={{ flex: "0 0 auto", overflow: "visible" }}>
-              <VisionBoard line={data.VISION_LINE} />
-            </div>
+          <div style={{ gridColumn: "2 / span 1", gridRow: "1 / span 2", alignSelf: "center", justifySelf: "stretch", zIndex: 2 }}>
+            <VisionBoard line={data.VISION_LINE} />
+          </div>
 
-            {/* Focus Target Card */}
+          <div
+            className="grid-card"
+            style={{
+              gridColumn: "1 / span 1",
+              gridRow: "2 / span 1",
+              alignSelf: "center",
+              justifySelf: "stretch",
+              padding: "24px 26px",
+              display: "flex",
+              alignItems: "center",
+              gap: 18,
+              minHeight: 145,
+              flexShrink: 0,
+            }}
+          >
+            <div className="zine-paperclip" />
             <div
-              className="grid-card"
               style={{
-                padding: "26px 30px",
-                display: "flex",
-                alignItems: "center",
-                gap: 22,
-                minHeight: 140,
+                width: 30,
+                height: 30,
+                border: "1.5px solid #0c0c0e",
+                borderRadius: 999,
+                display: "grid",
+                placeItems: "center",
                 flexShrink: 0,
               }}
             >
-              <div className="zine-paperclip" />
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  border: "1.5px solid #0c0c0e",
-                  borderRadius: 999,
-                  display: "grid",
-                  placeItems: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <ArrowDown size={14} />
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="zine-eyebrow blue" style={{ marginBottom: 6 }}>
-                  <span>↳ focus target</span>
-                  <span>02</span>
-                </div>
-                {activeTask ? (
-                  <>
-                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {activeTask.title}
-                    </div>
-                    <div className="mono" style={{ fontSize: 8.5, color: "#66666a", marginTop: 3 }}>
-                      weight: <span style={{ fontWeight: 600, color: "#0c0c0e" }}>{weightForTask(activeTask.title)}</span> · due {activeTask.due || "today"}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>
-                    No active focus targets
-                  </div>
-                )}
-              </div>
+              <ArrowDown size={14} />
             </div>
-
-            {/* Breathe widget */}
-            <Breathe style={{ flexShrink: 0 }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="zine-eyebrow blue" style={{ marginBottom: 6 }}>
+                <span>↳ focus target</span>
+                <span>02</span>
+              </div>
+              {activeTask ? (
+                <>
+                  <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {activeTask.title}
+                  </div>
+                  <div className="mono" style={{ fontSize: 8.5, color: "#66666a", marginTop: 3 }}>
+                    weight: <span style={{ fontWeight: 600, color: "#0c0c0e" }}>{weightForTask(activeTask.title)}</span> · due {activeTask.due || "today"}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>
+                  No active focus targets
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* COLUMN 2: SCHEDULE & PROBLEMS */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 32, height: "100%", minHeight: 0, overflow: "hidden" }}>
-            {/* Today's Schedule */}
-            <div style={{ flex: "0 0 330px", minHeight: 0, overflow: "hidden" }}>
-              <TodayScheduleCard data={data} />
-            </div>
+          <div style={{ gridColumn: "1 / span 1", gridRow: "1 / span 1", minHeight: 0, overflow: "hidden", alignSelf: "end", justifySelf: "stretch", transform: "translateY(12px)" }}>
+            <TodayScheduleCard data={data} />
+          </div>
 
-            {/* Open Problem Space */}
-            <div className="grid-card" style={{ flex: 1, minHeight: 0, padding: "24px 28px", display: "flex", flexDirection: "column", gap: 22 }}>
+          <div style={{ gridColumn: "2 / span 1", gridRow: "3 / span 1", minHeight: 0, alignSelf: "start", justifySelf: "stretch", transform: "translateY(-10px)" }}>
+            <div className="grid-card" style={{ minHeight: 0, padding: "22px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="zine-paperclip" />
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexShrink: 0 }}>
                 <div className="zine-eyebrow">
@@ -2383,7 +2396,7 @@ export function CockpitPage() {
               </div>
 
               {/* Add-problem input */}
-              <form onSubmit={addProblem} style={{ flexShrink: 0, border: "2px solid #000000", background: "#ffffff", padding: "10px 14px" }}>
+              <form onSubmit={addProblem} style={{ flexShrink: 0, border: "2px solid #000000", background: "#ffffff", padding: "9px 12px" }}>
                 <input
                   type="text"
                   placeholder="Log new bottleneck + Hit Enter..."
@@ -2394,7 +2407,7 @@ export function CockpitPage() {
               </form>
 
               {/* Problems list */}
-              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", flex: 1 }}>
+              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", maxHeight: 190 }}>
                 {activeProblems.length === 0 ? (
                   <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "8px 0", textAlign: "center" }}>
                     all problems solved
@@ -2407,7 +2420,7 @@ export function CockpitPage() {
                         display: "flex",
                         alignItems: "center",
                         gap: 10,
-                        padding: "9px 0",
+                        padding: "7px 0",
                         borderBottom: "1px dashed #000000",
                         fontSize: 12.5,
                         lineHeight: 1.35,
@@ -2434,8 +2447,7 @@ export function CockpitPage() {
             </div>
           </div>
 
-          {/* COLUMN 3: QUOTES DECK */}
-          <div style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ gridColumn: "3 / span 1", gridRow: "2 / span 2", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", alignSelf: "center", transform: "translateY(16px)" }}>
             <QuotesDeck
               quotes={data.QUOTES}
               onAddQuote={addQuote}

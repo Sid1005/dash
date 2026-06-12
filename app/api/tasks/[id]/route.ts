@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { TaskRow } from "@/lib/tasks-types";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,11 +31,12 @@ export async function PATCH(req: Request, ctx: Params) {
       );
     }
 
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const scope = await getUserScopedDb();
+    const { data, error } = await scope.supabase
       .from("tasks")
       .update(patch)
       .eq("id", id)
+      .eq("owner_user_id", scope.ownerUserId)
       .select("*")
       .single();
 
@@ -58,8 +59,12 @@ export async function DELETE(_req: Request, ctx: Params) {
     const { id } = await ctx.params;
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-    const supabase = createAdminClient();
-    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    const scope = await getUserScopedDb();
+    const { error } = await scope.supabase
+      .from("tasks")
+      .delete()
+      .eq("id", id)
+      .eq("owner_user_id", scope.ownerUserId);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });

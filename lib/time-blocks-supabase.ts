@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { type DbScope, resolveDbScope } from "@/lib/owner-scope";
 
 export const TIME_BLOCK_CATEGORIES = [
   "Deep Work",
@@ -76,11 +76,14 @@ function isMissingTableError(error: { code?: string; message?: string }) {
 }
 
 export async function listTimeBlocksForDate(
-  date: string
+  date: string,
+  scope?: DbScope
 ): Promise<TimeBlockEntry[]> {
-  const { data, error } = await createAdminClient()
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
+  const { data, error } = await supabase
     .from("time_blocks")
     .select("*")
+    .eq("owner_user_id", ownerUserId)
     .eq("occurred_date", date)
     .order("start_local", { ascending: true })
     .order("created_at", { ascending: true });
@@ -94,8 +97,10 @@ export async function listTimeBlocksForDate(
 
 export async function insertTimeBlock(
   date: string,
-  input: TimeBlockInput
+  input: TimeBlockInput,
+  scope?: DbScope
 ): Promise<TimeBlockEntry> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
   const activity = input.activity?.trim();
   if (!activity) throw new Error("Time block activity is required.");
 
@@ -108,6 +113,7 @@ export async function insertTimeBlock(
   }
 
   const payload = {
+    owner_user_id: ownerUserId,
     occurred_date: date,
     start_local: start,
     end_local: end,
@@ -115,7 +121,7 @@ export async function insertTimeBlock(
     category: normalizeCategory(input.category),
   };
 
-  const { data, error } = await createAdminClient()
+  const { data, error } = await supabase
     .from("time_blocks")
     .insert(payload)
     .select("*")
@@ -125,14 +131,16 @@ export async function insertTimeBlock(
   return rowToEntry(data as TimeBlockRow);
 }
 
-export async function deleteTimeBlock(id: string): Promise<void> {
+export async function deleteTimeBlock(id: string, scope?: DbScope): Promise<void> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
   const trimmed = id?.trim();
   if (!trimmed) throw new Error("Time block id is required.");
 
-  const { error } = await createAdminClient()
+  const { error } = await supabase
     .from("time_blocks")
     .delete()
-    .eq("id", trimmed);
+    .eq("id", trimmed)
+    .eq("owner_user_id", ownerUserId);
 
   if (error) throw new Error(error.message);
 }

@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { TaskRow } from "@/lib/tasks-types";
 import { rolloverOverdueTasks } from "@/lib/tasks-rollover";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 export async function GET() {
   try {
-    await rolloverOverdueTasks();
+    const scope = await getUserScopedDb();
+    await rolloverOverdueTasks(scope);
 
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const { data, error } = await scope.supabase
       .from("tasks")
       .select("*")
+      .eq("owner_user_id", scope.ownerUserId)
       .order("due_at", { ascending: true });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -34,10 +35,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
+    const scope = await getUserScopedDb();
+    const { data, error } = await scope.supabase
       .from("tasks")
-      .insert({ title, due_at, done: false })
+      .insert({ owner_user_id: scope.ownerUserId, title, due_at, done: false })
       .select("*")
       .single();
 
