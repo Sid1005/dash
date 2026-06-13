@@ -1,16 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent } from "@/lib/composio";
+import { createCalendarEvent, deleteCalendarEvent } from "@/lib/composio";
+import {
+  deleteCalendarEventByExternalId,
+  listCalendarEventsForDate,
+} from "@/lib/calendar-events-supabase";
+import { syncGoogleCalendarEventsForDate } from "@/lib/calendar-sync";
+import { getUserScopedDb } from "@/lib/owner-scope";
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Invalid request";
+}
 
 export async function GET(req: NextRequest) {
   const date =
     req.nextUrl.searchParams.get("date") ??
     new Date().toISOString().slice(0, 10);
-  const events = await getCalendarEvents(date);
+  const scope = await getUserScopedDb();
+  const shouldSync = req.nextUrl.searchParams.get("sync") === "true";
+
+  if (shouldSync) {
+    await syncGoogleCalendarEventsForDate(date, scope);
+  }
+
+  const events = await listCalendarEventsForDate(date, scope);
   return NextResponse.json({ date, events });
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const scope = await getUserScopedDb();
     const body = await req.json();
     const { title, start, end, description, location } = body;
     if (!title || !start || !end) {
@@ -20,14 +38,19 @@ export async function POST(req: NextRequest) {
       );
     }
     const ok = await createCalendarEvent({ title, start, end, description, location });
+    if (ok) {
+      const syncDate = String(start).slice(0, 10);
+      await syncGoogleCalendarEventsForDate(syncDate, scope);
+    }
     return NextResponse.json({ ok });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Invalid request" }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
+    const scope = await getUserScopedDb();
     let id = req.nextUrl.searchParams.get("id");
     if (!id) {
       const body = await req.json();
@@ -37,15 +60,19 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
     const ok = await deleteCalendarEvent(id);
+    if (ok) await deleteCalendarEventByExternalId(id, scope);
     return NextResponse.json({ ok });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // If JSON parsing fails but id is in searchParams, we can still succeed
-    let id = req.nextUrl.searchParams.get("id");
+    const id = req.nextUrl.searchParams.get("id");
     if (id) {
       const ok = await deleteCalendarEvent(id);
+      if (ok) {
+        const scope = await getUserScopedDb();
+        await deleteCalendarEventByExternalId(id, scope);
+      }
       return NextResponse.json({ ok });
     }
-    return NextResponse.json({ error: error?.message || "Invalid request" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
   }
 }
-

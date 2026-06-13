@@ -11,6 +11,10 @@ import {
   DateNavigator,
 } from "./DashFinal";
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function CalendarPage() {
   const [date, setDate] = useState(localIsoDate());
   const today = localIsoDate();
@@ -18,6 +22,8 @@ export function CalendarPage() {
   const dayData = useDayView(date, refreshTrigger);
   const now = nowMinutes();
   const isToday = date === today;
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
 
   // Time Block form state
   const [blockTitle, setBlockTitle] = useState("");
@@ -32,6 +38,27 @@ export function CalendarPage() {
   }, [dayData]);
 
   // Handler for adding Time Block
+  async function handleSyncCalendar() {
+    setSyncing(true);
+    setSyncError("");
+    try {
+      const res = await fetch("/api/calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate: date, endDate: date }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to sync calendar");
+      }
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      setSyncError(errorMessage(err, "Failed to sync calendar."));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function handleAddTimeBlock(e: FormEvent) {
     e.preventDefault();
     if (!blockTitle || !blockStart || !blockEnd) {
@@ -71,8 +98,8 @@ export function CalendarPage() {
       setBlockEnd("");
       setBlockCategory("Deep Work");
       setRefreshTrigger((prev) => prev + 1);
-    } catch (err: any) {
-      setBlockError(err.message || "An error occurred.");
+    } catch (err: unknown) {
+      setBlockError(errorMessage(err, "An error occurred."));
     } finally {
       setBlockSubmitting(false);
     }
@@ -96,8 +123,8 @@ export function CalendarPage() {
         throw new Error(errorData.error || "Failed to delete time block");
       }
       setRefreshTrigger((prev) => prev + 1);
-    } catch (err: any) {
-      alert(err.message || "Failed to delete time block.");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to delete time block."));
     }
   }
 
@@ -121,9 +148,31 @@ export function CalendarPage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                 {isToday && <span className="mono uc" style={{ fontSize: 9, color: "var(--blue)", letterSpacing: "0.15em" }}>today</span>}
-                <DateNavigator selectedDate={date} onChange={setDate} compact />
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={handleSyncCalendar}
+                    disabled={syncing}
+                    className="mono uc"
+                    style={{
+                      height: 34,
+                      border: "1px solid var(--text)",
+                      background: syncing ? "var(--line)" : "var(--text)",
+                      color: syncing ? "var(--muted)" : "var(--bg)",
+                      cursor: syncing ? "wait" : "pointer",
+                      padding: "0 12px",
+                      fontSize: 9,
+                      letterSpacing: "0.12em",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {syncing ? "syncing" : "sync"}
+                  </button>
+                  <DateNavigator selectedDate={date} onChange={setDate} compact />
+                </div>
               </div>
             </div>
+            {syncError && <div style={errorStyle}>{syncError}</div>}
             <div style={timelineMetaStyle}>
               <span>15 min grid</span>
               <span>{dayData?.blocks.length ?? 0} events</span>
@@ -328,15 +377,6 @@ const timelineScrollStyle = {
   overflowX: "hidden" as const,
   padding: "12px 8px 28px 0",
   scrollbarGutter: "stable" as const,
-};
-
-const listHeaderStyle = {
-  fontSize: "10px",
-  fontFamily: "var(--mono)",
-  textTransform: "uppercase" as const,
-  letterSpacing: "0.12em",
-  color: "var(--muted)",
-  marginBottom: "3px",
 };
 
 const emptyListStyle = {
