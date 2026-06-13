@@ -1,8 +1,8 @@
-import { createAdminClient } from "./supabase/admin";
+import { type DbScope, getDefaultOwnerDb } from "./owner-scope";
 import { currentIstDate, currentIstTime } from "./time";
 
-export async function rolloverOverdueTasks() {
-  const supabase = createAdminClient();
+export async function rolloverOverdueTasks(scope?: DbScope) {
+  const { supabase, ownerUserId } = scope ?? await getDefaultOwnerDb();
   const todayStr = currentIstDate();
   const todayStartIst = `${todayStr}T00:00:00+05:30`;
   const today12PmIst = `${todayStr}T12:00:00+05:30`;
@@ -11,6 +11,7 @@ export async function rolloverOverdueTasks() {
   const { data: overdueTasks, error: fetchError } = await supabase
     .from("tasks")
     .select("*")
+    .eq("owner_user_id", ownerUserId)
     .eq("done", false)
     .lt("due_at", todayStartIst);
 
@@ -29,6 +30,7 @@ export async function rolloverOverdueTasks() {
   const { data: existingLogs, error: checkError } = await supabase
     .from("activities")
     .select("metadata")
+    .eq("owner_user_id", ownerUserId)
     .eq("occurred_date", todayStr)
     .eq("actor", "system")
     .eq("verb", "deferred");
@@ -56,6 +58,7 @@ export async function rolloverOverdueTasks() {
 
     if (!loggedTaskIds.has(task.id)) {
       activitiesToInsert.push({
+        owner_user_id: ownerUserId,
         occurred_date: todayStr,
         time_local: currentTime,
         actor: "system",
@@ -75,6 +78,7 @@ export async function rolloverOverdueTasks() {
   const { error: updateError } = await supabase
     .from("tasks")
     .update({ due_at: today12PmIst, updated_at: new Date().toISOString() })
+    .eq("owner_user_id", ownerUserId)
     .in("id", idsToUpdate);
 
   if (updateError) {

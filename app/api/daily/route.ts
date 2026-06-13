@@ -17,14 +17,16 @@ import {
   listSpendingForDate,
 } from "@/lib/spending-supabase";
 import { currentIstDate } from "@/lib/time";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date") ?? currentIstDate();
+  const scope = await getUserScopedDb();
   const [food, activities, time_blocks, spending] = await Promise.all([
-    listFoodEntriesForDate(date),
-    listActivitiesForDate(date),
-    listTimeBlocksForDate(date),
-    listSpendingForDate(date),
+    listFoodEntriesForDate(date, scope),
+    listActivitiesForDate(date, scope),
+    listTimeBlocksForDate(date, scope),
+    listSpendingForDate(date, scope),
   ]);
   const spendingMapped = spending.map((s) => ({
     id: s.id,
@@ -40,21 +42,22 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { date, type, data } = body;
   const d = date ?? currentIstDate();
+  const scope = await getUserScopedDb();
 
   if (type === "food") {
-    const row = await insertFoodEntry(d, data as FoodEntry);
+    const row = await insertFoodEntry(d, data as FoodEntry, scope);
     return NextResponse.json({ ok: true, food: row });
   }
   if (type === "spending") {
-    const row = await insertSpending(d, data as { item: string; amount: number; category: string; time: string });
+    const row = await insertSpending(d, data as { item: string; amount: number; category: string; time: string }, scope);
     return NextResponse.json({ ok: true, spending: row });
   }
   if (type === "time_block") {
-    const block = await insertTimeBlock(d, data);
+    const block = await insertTimeBlock(d, data, scope);
     return NextResponse.json({ ok: true, time_block: block });
   }
   if (type === "activity") {
-    const activity = await insertActivity(d, data);
+    const activity = await insertActivity(d, data, scope);
     return NextResponse.json({ ok: true, activity });
   }
   return NextResponse.json({ error: "unknown type" }, { status: 400 });
@@ -64,6 +67,7 @@ export async function DELETE(req: NextRequest) {
   const body = await req.json();
   const { date, type, id, index } = body;
   const d = date ?? currentIstDate();
+  const scope = await getUserScopedDb();
 
   if (type === "food") {
     const foodId = typeof id === "string" ? id.trim() : "";
@@ -73,7 +77,7 @@ export async function DELETE(req: NextRequest) {
         { status: 400 }
       );
     }
-    await deleteFoodEntry(foodId);
+    await deleteFoodEntry(foodId, scope);
     return NextResponse.json({ ok: true });
   }
 
@@ -85,7 +89,7 @@ export async function DELETE(req: NextRequest) {
         { status: 400 }
       );
     }
-    await deleteTimeBlock(blockId);
+    await deleteTimeBlock(blockId, scope);
     return NextResponse.json({ ok: true });
   }
 
@@ -94,7 +98,7 @@ export async function DELETE(req: NextRequest) {
     if (!spendId) {
       return NextResponse.json({ error: "spending delete requires id (uuid)" }, { status: 400 });
     }
-    await deleteSpending(spendId);
+    await deleteSpending(spendId, scope);
     return NextResponse.json({ ok: true });
   }
 

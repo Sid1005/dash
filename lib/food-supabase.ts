@@ -1,5 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { FoodEntry } from "@/lib/types";
+import { type DbScope, resolveDbScope } from "@/lib/owner-scope";
 
 export type FoodEntryWithId = FoodEntry & { id: string };
 
@@ -31,11 +31,12 @@ function rowToEntry(row: FoodRow): FoodEntryWithId {
   };
 }
 
-export async function listFoodEntriesForDate(loggedDate: string): Promise<FoodEntryWithId[]> {
-  const supabase = createAdminClient();
+export async function listFoodEntriesForDate(loggedDate: string, scope?: DbScope): Promise<FoodEntryWithId[]> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
   const { data, error } = await supabase
     .from("food_entries")
     .select("*")
+    .eq("owner_user_id", ownerUserId)
     .eq("logged_date", loggedDate)
     .order("time_local", { ascending: true })
     .order("created_at", { ascending: true });
@@ -46,10 +47,12 @@ export async function listFoodEntriesForDate(loggedDate: string): Promise<FoodEn
 
 export async function insertFoodEntry(
   loggedDate: string,
-  entry: FoodEntry
+  entry: FoodEntry,
+  scope?: DbScope
 ): Promise<FoodEntryWithId> {
-  const supabase = createAdminClient();
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
   const payload = {
+    owner_user_id: ownerUserId,
     logged_date: loggedDate,
     name: entry.name.trim(),
     calories: Math.max(0, Math.round(entry.calories ?? 0)),
@@ -70,8 +73,8 @@ export async function insertFoodEntry(
   return rowToEntry(data as FoodRow);
 }
 
-export async function deleteFoodEntry(id: string): Promise<void> {
-  const supabase = createAdminClient();
-  const { error } = await supabase.from("food_entries").delete().eq("id", id);
+export async function deleteFoodEntry(id: string, scope?: DbScope): Promise<void> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
+  const { error } = await supabase.from("food_entries").delete().eq("id", id).eq("owner_user_id", ownerUserId);
   if (error) throw new Error(error.message);
 }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 export async function GET() {
   try {
-    const supabase = createAdminClient();
+    const { supabase, ownerUserId } = await getUserScopedDb();
     // Fetch workouts with their exercises (sets) in one query
     const { data, error } = await supabase
       .from("workouts")
@@ -20,6 +20,7 @@ export async function GET() {
           notes
         )
       `)
+      .eq("owner_user_id", ownerUserId)
       .order("occurred_date", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       date: string;
       exercises: { name: string; sets: { reps: number; weight_kg: number }[]; notes?: string }[];
     };
-    const supabase = createAdminClient();
+    const { supabase, ownerUserId } = await getUserScopedDb();
 
     let wk = null;
     let wkErr = null;
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
     // Try inserting with 'text' to satisfy the constraint on remote database (unmigrated)
     const insertRes = await supabase
       .from("workouts")
-      .insert({ occurred_date: date, text: "Workout Session" })
+      .insert({ owner_user_id: ownerUserId, occurred_date: date, text: "Workout Session" })
       .select("id")
       .single();
 
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       if (isSchemaError) {
         const retryRes = await supabase
           .from("workouts")
-          .insert({ occurred_date: date })
+          .insert({ owner_user_id: ownerUserId, occurred_date: date })
           .select("id")
           .single();
         wk = retryRes.data;
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
     const setRows = exercises.flatMap((ex) =>
       ex.sets.map((s, si) => ({
         workout_id: wk.id,
+        owner_user_id: ownerUserId,
         exercise_name: ex.name,
         set_number: si + 1,
         reps: s.reps,
@@ -100,11 +102,12 @@ export async function DELETE(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: "Missing workout ID" }, { status: 400 });
     }
-    const supabase = createAdminClient();
+    const { supabase, ownerUserId } = await getUserScopedDb();
     const { error } = await supabase
       .from("workouts")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("owner_user_id", ownerUserId);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });
@@ -123,13 +126,14 @@ export async function PUT(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: "Missing workout ID" }, { status: 400 });
     }
-    const supabase = createAdminClient();
+    const { supabase, ownerUserId } = await getUserScopedDb();
 
     if (date) {
       const { error: dateErr } = await supabase
         .from("workouts")
         .update({ occurred_date: date })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("owner_user_id", ownerUserId);
       if (dateErr) return NextResponse.json({ error: dateErr.message }, { status: 500 });
     }
 
@@ -137,7 +141,8 @@ export async function PUT(req: NextRequest) {
     const { error: delErr } = await supabase
       .from("workout_exercises")
       .delete()
-      .eq("workout_id", id);
+      .eq("workout_id", id)
+      .eq("owner_user_id", ownerUserId);
 
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
@@ -145,6 +150,7 @@ export async function PUT(req: NextRequest) {
     const setRows = exercises.flatMap((ex) =>
       ex.sets.map((s, si) => ({
         workout_id: id,
+        owner_user_id: ownerUserId,
         exercise_name: ex.name,
         set_number: si + 1,
         reps: s.reps,
@@ -164,5 +170,4 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }
-
 

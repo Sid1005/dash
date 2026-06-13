@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateIdea, deleteIdea } from "@/lib/ideas-supabase";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -32,7 +33,7 @@ export async function PATCH(req: Request, ctx: Params) {
       );
     }
 
-    const updated = await updateIdea(id, patch);
+    const updated = await updateIdea(id, patch, await getUserScopedDb());
     return NextResponse.json({ idea: updated });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -47,7 +48,7 @@ export async function DELETE(req: Request, ctx: Params) {
       return NextResponse.json({ error: "Missing id" }, { status: 400 });
     }
 
-    await deleteIdea(id);
+    await deleteIdea(id, await getUserScopedDb());
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

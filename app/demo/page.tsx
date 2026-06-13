@@ -145,14 +145,6 @@ export default function DemoPage() {
   // Tasks list state (interactive completion)
   const [tasksList, setTasksList] = useState(MOCK_DATA.TASKS);
   
-  // Scratchpad items (interactive completion)
-  const [scratchItems, setScratchItems] = useState([
-    { id: "s1", text: "Buy high-protein snacks for the afternoon code session", done: false },
-    { id: "s2", text: "Double-check Supabase schema backup locks", done: false },
-    { id: "s3", text: "Read Next.js breaking changes document in node_modules", done: true },
-  ]);
-  const [newScratchText, setNewScratchText] = useState("");
-  
   // Problems state (interactive solve)
   const [problemsList, setProblemsList] = useState(MOCK_DATA.PROBLEMS);
   
@@ -293,27 +285,6 @@ export default function DemoPage() {
 
   const handleSolveProblem = (id: string) => {
     setProblemsList(prev => prev.filter(p => p.id !== id));
-  };
-
-  // Add scratch task
-  const handleAddScratch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newScratchText.trim()) return;
-    setScratchItems([
-      { id: Math.random().toString(), text: newScratchText.trim(), done: false },
-      ...scratchItems
-    ]);
-    setNewScratchText("");
-  };
-
-  // Toggle scratch task
-  const handleToggleScratch = (id: string) => {
-    setScratchItems(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
-  };
-
-  // Delete scratch task
-  const handleDeleteScratch = (id: string) => {
-    setScratchItems(prev => prev.filter(item => item.id !== id));
   };
 
   // Add idea
@@ -465,7 +436,6 @@ export default function DemoPage() {
         <nav style={{ display: "flex", gap: 20 }}>
           {[
             { id: "cockpit", label: "cockpit" },
-            { id: "scratchpad", label: "scratchpad" },
             { id: "tasks", label: "tasks & learning" },
             { id: "activities", label: "activities" },
             { id: "calendar", label: "calendar" },
@@ -539,7 +509,7 @@ export default function DemoPage() {
         </div>
 
         {/* DYNAMIC DATE NAVIGATOR FOR DETAILS PAGES */}
-        {activeTab !== "cockpit" && activeTab !== "ideas" && activeTab !== "scratchpad" && (
+        {activeTab !== "cockpit" && activeTab !== "ideas" && (
           <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
             {/* Week selector strip */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #0c0c0e", padding: "4px 8px", backgroundColor: "#ffffff" }}>
@@ -1036,134 +1006,6 @@ export default function DemoPage() {
                 <RotateCcw size={11} />
                 <span>Next Quote</span>
               </button>
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 2: SCRATCHPAD */}
-        {activeTab === "scratchpad" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 24, height: "100%", minHeight: 0 }}>
-            
-            {/* Checklist Section */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 24, height: "100%", minHeight: 0 }}>
-              
-              {/* Quick Add Form */}
-              <div className="grid-card" style={{ padding: 20, flexShrink: 0 }}>
-                <div className="mono" style={{ fontSize: 9, textTransform: "uppercase", color: "#66666a", marginBottom: 10 }}>
-                  ↳ quick add task
-                </div>
-                <form onSubmit={handleAddScratch} style={{ display: "flex", gap: 12 }}>
-                  <input
-                    type="text"
-                    value={newScratchText}
-                    onChange={(e) => setNewScratchText(e.target.value)}
-                    placeholder="Enter item text..."
-                    required
-                    style={{
-                      flex: 1,
-                      background: "none",
-                      border: "1px solid #0c0c0e",
-                      padding: "8px 12px",
-                      fontSize: 13,
-                      outline: "none",
-                      fontFamily: "var(--font-demo-sans)"
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    className="mono"
-                    style={{
-                      background: "#0c0c0e",
-                      color: "#faf9f6",
-                      border: "none",
-                      padding: "0 16px",
-                      fontSize: 11,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.1em",
-                      cursor: "pointer"
-                    }}
-                  >
-                    + Add
-                  </button>
-                </form>
-              </div>
-
-              {/* Tasks Checklist */}
-              <div className="grid-card" style={{ padding: 24, flex: 1, minHeight: 0, overflowY: "auto" }}>
-                <div className="mono" style={{ fontSize: 9, textTransform: "uppercase", color: "#66666a", marginBottom: 12 }}>
-                  ↳ scratch checklist
-                </div>
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  {scratchItems.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 0",
-                        borderBottom: "1px solid #e2e2e0"
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <button
-                          onClick={() => handleToggleScratch(item.id)}
-                          style={{
-                            width: 15,
-                            height: 15,
-                            border: "1.5px solid #0c0c0e",
-                            background: item.done ? "#0c0c0e" : "transparent",
-                            cursor: "pointer",
-                            display: "grid",
-                            placeItems: "center",
-                            padding: 0
-                          }}
-                        >
-                          {item.done && <Check size={10} style={{ color: "#faf9f6" }} />}
-                        </button>
-                        <span style={{
-                          fontSize: 13.5,
-                          textDecoration: item.done ? "line-through" : "none",
-                          color: item.done ? "#66666a" : "#0c0c0e"
-                        }}>
-                          {item.text}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteScratch(item.id)}
-                        className="mono"
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#66666a",
-                          cursor: "pointer",
-                          fontSize: 10.5
-                        }}
-                        onMouseOver={(e) => e.currentTarget.style.color = "#0c0c0e"}
-                        onMouseOut={(e) => e.currentTarget.style.color = "#66666a"}
-                      >
-                        [delete]
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-
-            {/* Sidebar Context */}
-            <div className="grid-card" style={{ padding: 24, height: "fit-content" }}>
-              <div className="mono" style={{ fontSize: 9, textTransform: "uppercase", color: "#66666a", marginBottom: 12 }}>
-                ↳ focus parameters
-              </div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.45, display: "flex", flexDirection: "column", gap: 12 }}>
-                <p>"The scratchpad is local-only storage. Capture fast ideas and cross them out as you execute."</p>
-                <div style={{ borderTop: "1px dashed #e2e2e0", paddingTop: 12 }}>
-                  <div className="mono" style={{ fontSize: 9, color: "#66666a", marginBottom: 2 }}>pending items</div>
-                  <div style={{ fontSize: 20, fontWeight: 500 }}>{scratchItems.filter(i => !i.done).length}</div>
-                </div>
-              </div>
             </div>
 
           </div>

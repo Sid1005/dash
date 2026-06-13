@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { format, parseISO, subDays } from "date-fns";
-import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check } from "lucide-react";
+import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check, Plus, Trash2, GripVertical } from "lucide-react";
 
 type TaskApiRow = {
   id: string;
@@ -129,6 +130,24 @@ export type DashData = {
   SCHEDULE_ELAPSED_MIN: number;
   QUOTES: QuoteRow[];
 };
+
+type CockpitCardItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+type CockpitPostcard = {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
+  items: CockpitCardItem[];
+};
+
+type SystemPostcardId = "next" | "problems";
+
+type SystemPostcardPositions = Record<SystemPostcardId, { x: number; y: number }>;
 
 // ── Day timeline ──────────────────────────────────────────────────────────────
 const TL_START = 6 * 60;   // 6:00 AM
@@ -482,7 +501,7 @@ export function useDashData(
           dateLong: format(new Date(`${today}T12:00:00`), "EEEE, MMMM d, yyyy"),
         },
         FOCUS: { title: taskRows[0]?.title ?? "Choose the next important task." },
-        VISION_LINE: "Build tools that make one person feel like a team of ten.",
+        VISION_LINE: "Do what I truly want and be who I am meant to be.",
         PROBLEMS: problemsRes.problems ?? [],
         BLOCKS: blocks,
         TASKS: taskRows,
@@ -639,7 +658,6 @@ export function Eyebrow({
 
 const NAV_ITEMS = [
   { id: "cockpit", label: "cockpit", href: "/" },
-  { id: "scratchpad", label: "scratchpad", href: "/scratchpad" },
   { id: "tasks", label: "tasks & learning", href: "/tasks" },
   { id: "activities", label: "activities", href: "/activities" },
   { id: "calendar", label: "calendar", href: "/calendar" },
@@ -648,7 +666,9 @@ const NAV_ITEMS = [
   { id: "ideas", label: "ideas", href: "/ideas" },
 ];
 
-function Nav({ active }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas" | "scratchpad" }) {
+type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas";
+
+function Nav({ active }: { active: NavItemId }) {
   return (
     <nav style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
       {NAV_ITEMS.map((item) => (
@@ -670,9 +690,15 @@ function Nav({ active }: { active: "cockpit" | "calendar" | "tasks" | "food" | "
   );
 }
 
-export function PageHeader({ active, data }: { active: "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas" | "scratchpad"; data: DashData | null }) {
-  const now = data?.NOW_MIN ?? nowMinutes();
-  const t = `${String(Math.floor(now / 60)).padStart(2, "0")}:${String(now % 60).padStart(2, "0")}`;
+export function PageHeader({ active, data }: { active: NavItemId; data: DashData | null }) {
+  const [clientNow, setClientNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setClientNow(nowMinutes());
+  }, []);
+
+  const now = data?.NOW_MIN ?? clientNow;
+  const t = now === null ? "--:--" : `${String(Math.floor(now / 60)).padStart(2, "0")}:${String(now % 60).padStart(2, "0")}`;
   return (
     <header
       style={{
@@ -732,12 +758,24 @@ export function DateNavigator({
   compact?: boolean;
 }) {
   const [showMonthGrid, setShowMonthGrid] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [calendarPosition, setCalendarPosition] = useState<{ top: number; left: number } | null>(null);
   const calendarDialogRef = useRef<HTMLDivElement>(null);
+  const calendarButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close month calendar when clicking outside
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (calendarDialogRef.current && !calendarDialogRef.current.contains(event.target as Node)) {
+      if (
+        calendarDialogRef.current &&
+        !calendarDialogRef.current.contains(event.target as Node) &&
+        calendarButtonRef.current &&
+        !calendarButtonRef.current.contains(event.target as Node)
+      ) {
         setShowMonthGrid(false);
       }
     }
@@ -799,6 +837,21 @@ export function DateNavigator({
     onChange(localIsoDate(d));
   };
 
+  const toggleMonthGrid = () => {
+    if (!calendarButtonRef.current) {
+      setShowMonthGrid((show) => !show);
+      return;
+    }
+
+    const rect = calendarButtonRef.current.getBoundingClientRect();
+    const dropdownWidth = 250;
+    setCalendarPosition({
+      top: rect.bottom + 8,
+      left: Math.min(window.innerWidth - dropdownWidth - 12, Math.max(12, rect.right - dropdownWidth)),
+    });
+    setShowMonthGrid((show) => !show);
+  };
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: compact ? 8 : 16, position: "relative", maxWidth: "100%" }}>
       {/* Week selector strip */}
@@ -848,8 +901,9 @@ export function DateNavigator({
 
       {/* Calendar icon trigger */}
       <button
+        ref={calendarButtonRef}
         type="button"
-        onClick={() => setShowMonthGrid(!showMonthGrid)}
+        onClick={toggleMonthGrid}
         style={{
           width: compact ? 34 : 38,
           height: compact ? 34 : 38,
@@ -866,19 +920,19 @@ export function DateNavigator({
       </button>
 
       {/* Monthly grid calendar dropdown */}
-      {showMonthGrid && (
+      {mounted && showMonthGrid && calendarPosition && createPortal(
         <div
           ref={calendarDialogRef}
           style={{
-            position: "absolute",
-            top: "46px",
-            right: 0,
+            position: "fixed",
+            top: calendarPosition.top,
+            left: calendarPosition.left,
             width: 250,
             border: "1px solid var(--text)",
             backgroundColor: "var(--bg)",
             padding: 16,
             boxShadow: "4px 4px 0px var(--text)",
-            zIndex: 200
+            zIndex: 10000
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -931,7 +985,8 @@ export function DateNavigator({
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1783,22 +1838,15 @@ function ActiveProblems({ data, onSolve }: { data: DashData; onSolve: (id: strin
 }
 
 function VisionBoard({ line }: { line: string }) {
-  const visionItems = [
-    { title: "✦ MONEY", text: "Nothing too expensive. Enough to never think about cost." },
-    { title: "✦ WORK", text: "Exciting work. Excited on a Monday morning." },
-    { title: "✦ PEOPLE", text: "People I admire, grow with. A small, tight circle." },
-    { title: "✦ LIFE", text: "Travel. Rich experiences, and absolute freedom." }
-  ];
-
   return (
     <div
       className="grid-card"
       style={{
-        padding: "24px 26px 24px",
+        padding: "30px 32px 34px",
         height: "auto",
         display: "flex",
         flexDirection: "column",
-        gap: 14,
+        gap: 24,
         overflow: "visible",
       }}
     >
@@ -1810,24 +1858,16 @@ function VisionBoard({ line }: { line: string }) {
       <div
         style={{
           borderLeft: "6px solid #000000",
-          paddingLeft: 12,
-          fontSize: 18,
-          lineHeight: 1.3,
+          paddingLeft: 16,
+          fontSize: 26,
+          lineHeight: 1.18,
           fontWeight: 900,
           letterSpacing: 0,
           maxWidth: 660,
-          textTransform: "uppercase",
+          textTransform: "none",
         }}
       >
-        "{line}"
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, rowGap: 14 }}>
-        {visionItems.map((v, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span className="mono" style={{ fontSize: 13, color: "#000000", fontWeight: 900 }}>{v.title}</span>
-            <span style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.25 }}>{v.text}</span>
-          </div>
-        ))}
+        {line}
       </div>
     </div>
   );
@@ -2241,10 +2281,153 @@ function QuotesDeck({
   );
 }
 
+function createDefaultCockpitCards(): CockpitPostcard[] {
+  return [
+    {
+      id: "doing",
+      title: "What I am doing",
+      x: 420,
+      y: 118,
+      items: [
+        { id: "doing-1", text: "Keep the current work visible", done: false },
+      ],
+    },
+    {
+      id: "thinking",
+      title: "Thinking space",
+      x: 760,
+      y: 248,
+      items: [
+        { id: "thinking-1", text: "Capture the next useful move", done: false },
+      ],
+    },
+  ];
+}
+
+function createDefaultSystemPostcardPositions(): SystemPostcardPositions {
+  return {
+    next: { x: 38, y: 34 },
+    problems: { x: 38, y: 324 },
+  };
+}
+
+function CockpitPostcardShell({
+  title,
+  eyebrow,
+  count,
+  x,
+  y,
+  children,
+  onPointerDown,
+}: {
+  title: string;
+  eyebrow: string;
+  count?: string;
+  x: number;
+  y: number;
+  children: React.ReactNode;
+  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      className="grid-card deck-card"
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width: 292,
+        minHeight: 220,
+        padding: 0,
+        overflow: "hidden",
+        background: "#fffdf5",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div
+        onPointerDown={onPointerDown}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          borderBottom: "2px solid #000000",
+          background: "#fef08a",
+          padding: "12px 14px",
+          cursor: onPointerDown ? "grab" : "default",
+          touchAction: "none",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div className="mono" style={{ fontSize: 8.5, fontWeight: 900, textTransform: "uppercase", color: "#0c0c0e", marginBottom: 3 }}>
+            ↳ {eyebrow}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {title}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {count && <span className="mono" style={{ fontSize: 11 }}>{count}</span>}
+          {onPointerDown && <GripVertical size={15} />}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function CockpitPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [newProblem, setNewProblem] = useState("");
-  const data = useDashData(undefined, refreshTrigger);
+  const [newCardTitle, setNewCardTitle] = useState("");
+  const [cards, setCards] = useState<CockpitPostcard[]>([]);
+  const [cardsLoaded, setCardsLoaded] = useState(false);
+  const [systemPositions, setSystemPositions] = useState<SystemPostcardPositions>(createDefaultSystemPostcardPositions);
+  const [systemPositionsLoaded, setSystemPositionsLoaded] = useState(false);
+  const [dragState, setDragState] = useState<{
+    id: string;
+    kind: "user" | "system";
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const data = useDashData(undefined, refreshTrigger, { includeLearnings: false });
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("dash_cockpit_postcards_v1");
+      const parsed = saved ? JSON.parse(saved) as CockpitPostcard[] : null;
+      setCards(Array.isArray(parsed) && parsed.length > 0 ? parsed : createDefaultCockpitCards());
+    } catch {
+      setCards(createDefaultCockpitCards());
+    } finally {
+      setCardsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("dash_cockpit_system_postcards_v1");
+      const parsed = saved ? JSON.parse(saved) as Partial<SystemPostcardPositions> : null;
+      setSystemPositions({ ...createDefaultSystemPostcardPositions(), ...parsed });
+    } catch {
+      setSystemPositions(createDefaultSystemPostcardPositions());
+    } finally {
+      setSystemPositionsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!cardsLoaded) return;
+    window.localStorage.setItem("dash_cockpit_postcards_v1", JSON.stringify(cards));
+  }, [cards, cardsLoaded]);
+
+  useEffect(() => {
+    if (!systemPositionsLoaded) return;
+    window.localStorage.setItem("dash_cockpit_system_postcards_v1", JSON.stringify(systemPositions));
+  }, [systemPositions, systemPositionsLoaded]);
 
   const solveProblem = useCallback(async (id: string) => {
     await fetch(`/api/problems/${id}`, {
@@ -2267,180 +2450,334 @@ export function CockpitPage() {
     setRefreshTrigger((prev) => prev + 1);
   }, [newProblem]);
 
-  const addQuote = useCallback(async (text: string, author?: string) => {
-    await fetch("/api/quotes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, author }),
-    });
-    setRefreshTrigger((prev) => prev + 1);
+  const createCard = useCallback((e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newCardTitle.trim()) return;
+    const offset = cards.length % 5;
+    const card: CockpitPostcard = {
+      id: Math.random().toString(36).slice(2, 10),
+      title: newCardTitle.trim(),
+      x: 410 + offset * 38,
+      y: 410 + offset * 28,
+      items: [],
+    };
+    setCards((current) => [...current, card]);
+    setNewCardTitle("");
+  }, [cards.length, newCardTitle]);
+
+  const addCardItem = useCallback((cardId: string, text: string) => {
+    if (!text.trim()) return;
+    setCards((current) => current.map((card) => (
+      card.id === cardId
+        ? { ...card, items: [...card.items, { id: Math.random().toString(36).slice(2, 10), text: text.trim(), done: false }] }
+        : card
+    )));
   }, []);
 
-  const deleteQuote = useCallback(async (id: string) => {
-    await fetch("/api/quotes", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+  const toggleCardItem = useCallback((cardId: string, itemId: string) => {
+    setCards((current) => current.map((card) => (
+      card.id === cardId
+        ? { ...card, items: card.items.map((item) => item.id === itemId ? { ...item, done: !item.done } : item) }
+        : card
+    )));
+  }, []);
+
+  const deleteCardItem = useCallback((cardId: string, itemId: string) => {
+    setCards((current) => current.map((card) => (
+      card.id === cardId
+        ? { ...card, items: card.items.filter((item) => item.id !== itemId) }
+        : card
+    )));
+  }, []);
+
+  const deleteCard = useCallback((cardId: string) => {
+    setCards((current) => current.filter((card) => card.id !== cardId));
+  }, []);
+
+  const startDrag = useCallback((
+    item: { id: string; x: number; y: number },
+    kind: "user" | "system",
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, textarea, a")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragState({
+      id: item.id,
+      kind,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: item.x,
+      originY: item.y,
     });
-    setRefreshTrigger((prev) => prev + 1);
+  }, []);
+
+  const moveDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragState || !boardRef.current) return;
+    const rect = boardRef.current.getBoundingClientRect();
+    const nextX = Math.max(12, Math.min(rect.width - 312, dragState.originX + event.clientX - dragState.startX));
+    const nextY = Math.max(12, Math.min(rect.height - 256, dragState.originY + event.clientY - dragState.startY));
+    if (dragState.kind === "system") {
+      const systemId = dragState.id as SystemPostcardId;
+      setSystemPositions((current) => ({
+        ...current,
+        [systemId]: { x: nextX, y: nextY },
+      }));
+      return;
+    }
+
+    setCards((current) => current.map((card) => card.id === dragState.id ? { ...card, x: nextX, y: nextY } : card));
+  }, [dragState]);
+
+  const endDrag = useCallback(() => {
+    setDragState(null);
   }, []);
 
   if (!data) return <LoadingPage />;
 
   const activeTask = data.TASKS.find(t => !t.done);
   const activeProblems = data.PROBLEMS.filter(p => !p.solved);
+  const upcomingEvent = [...data.BLOCKS]
+    .filter((block) => block.kind === "cal" && toMinutes(block.end) >= data.NOW_MIN)
+    .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))[0];
 
   return (
     <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <PageHeader active="cockpit" data={data} />
 
-      <main style={{ flex: 1, minHeight: 0, padding: "32px 32px 40px", boxSizing: "border-box" }}>
+      <main style={{ flex: 1, minHeight: 0, padding: "18px 28px 28px", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
         <div
+          ref={boardRef}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1.15fr) minmax(0, 1.05fr)",
-            gap: 32,
-            height: "100%",
+            position: "relative",
+            flex: 1,
             minHeight: 0,
-            overflow: "hidden",
+            overflow: "auto",
+            border: "1px solid rgba(12, 12, 14, 0.16)",
+            backgroundImage: "radial-gradient(rgba(12, 12, 14, 0.12) 1px, transparent 1px)",
+            backgroundSize: "28px 28px",
+            backgroundColor: "rgba(252, 251, 247, 0.32)",
           }}
         >
-          {/* COLUMN 1: VISION, FOCUS TARGET & BREATHE */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%", minHeight: 0 }}>
-            {/* Vision Board */}
-            <div style={{ flex: "0 0 auto", overflow: "visible" }}>
-              <VisionBoard line={data.VISION_LINE} />
-            </div>
-
-            {/* Focus Target Card */}
+          <div style={{ position: "relative", minWidth: 1120, minHeight: 840 }}>
             <div
-              className="grid-card"
               style={{
-                padding: "26px 30px",
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "170px minmax(280px, 1fr) 380px",
                 alignItems: "center",
-                gap: 22,
-                minHeight: 140,
-                flexShrink: 0,
+                gap: 24,
+                padding: "24px 32px 20px",
               }}
             >
-              <div className="zine-paperclip" />
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  border: "1.5px solid #0c0c0e",
-                  borderRadius: 999,
-                  display: "grid",
-                  placeItems: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <ArrowDown size={14} />
+              <div className="zine-eyebrow blue" style={{ width: "fit-content" }}>
+                <span>↳ cockpit board</span>
+                <span>01</span>
               </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="zine-eyebrow blue" style={{ marginBottom: 6 }}>
-                  <span>↳ focus target</span>
-                  <span>02</span>
-                </div>
-                {activeTask ? (
-                  <>
-                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {activeTask.title}
-                    </div>
-                    <div className="mono" style={{ fontSize: 8.5, color: "#66666a", marginTop: 3 }}>
-                      weight: <span style={{ fontWeight: 600, color: "#0c0c0e" }}>{weightForTask(activeTask.title)}</span> · due {activeTask.due || "today"}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)" }}>
-                    No active focus targets
-                  </div>
-                )}
+              <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.05, textAlign: "center", maxWidth: 460, justifySelf: "center" }}>
+                {data.VISION_LINE}
               </div>
-            </div>
-
-            {/* Breathe widget */}
-            <Breathe style={{ flexShrink: 0 }} />
-          </div>
-
-          {/* COLUMN 2: SCHEDULE & PROBLEMS */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 32, height: "100%", minHeight: 0, overflow: "hidden" }}>
-            {/* Today's Schedule */}
-            <div style={{ flex: "0 0 330px", minHeight: 0, overflow: "hidden" }}>
-              <TodayScheduleCard data={data} />
-            </div>
-
-            {/* Open Problem Space */}
-            <div className="grid-card" style={{ flex: 1, minHeight: 0, padding: "24px 28px", display: "flex", flexDirection: "column", gap: 22 }}>
-              <div className="zine-paperclip" />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexShrink: 0 }}>
-                <div className="zine-eyebrow">
-                  <span>↳ open problem space</span>
-                  <span>05</span>
-                </div>
-                <span className="mono" style={{ fontSize: 15, color: "#0c0c0e", whiteSpace: "nowrap" }}>{activeProblems.length} items</span>
-              </div>
-
-              {/* Add-problem input */}
-              <form onSubmit={addProblem} style={{ flexShrink: 0, border: "2px solid #000000", background: "#ffffff", padding: "10px 14px" }}>
+              <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", justifySelf: "end" }}>
                 <input
-                  type="text"
-                  placeholder="Log new bottleneck + Hit Enter..."
-                  value={newProblem}
-                  onChange={(e) => setNewProblem(e.target.value)}
-                  style={{ border: "none", outline: "none", fontSize: 15, width: "100%", background: "transparent", color: "var(--text)", fontFamily: "inherit" }}
+                  value={newCardTitle}
+                  onChange={(e) => setNewCardTitle(e.target.value)}
+                  placeholder="New postcard"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: "#ffffff",
+                    border: "2px solid #000000",
+                    padding: "12px 14px",
+                    fontSize: 14,
+                    fontFamily: "inherit",
+                    outline: "none",
+                  }}
                 />
+                <button
+                  type="submit"
+                  disabled={!newCardTitle.trim()}
+                  title="Add postcard"
+                  style={{
+                    width: 44,
+                    height: 44,
+                    background: "#0c0c0e",
+                    color: "#faf9f6",
+                    border: "none",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                  }}
+                >
+                  <Plus size={18} />
+                </button>
               </form>
-
-              {/* Problems list */}
-              <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", flex: 1 }}>
-                {activeProblems.length === 0 ? (
-                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "8px 0", textAlign: "center" }}>
-                    all problems solved
-                  </div>
-                ) : (
-                  activeProblems.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "9px 0",
-                        borderBottom: "1px dashed #000000",
-                        fontSize: 12.5,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      <button
-                        onClick={() => solveProblem(p.id)}
-                        title="Mark solved"
-                        style={{
-                          width: 16,
-                          height: 16,
-                          border: "2px solid #000000",
-                          background: "none",
-                          cursor: "pointer",
-                          flexShrink: 0,
-                          padding: 0,
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>{p.text}</div>
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
-          </div>
 
-          {/* COLUMN 3: QUOTES DECK */}
-          <div style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <QuotesDeck
-              quotes={data.QUOTES}
-              onAddQuote={addQuote}
-              onDeleteQuote={deleteQuote}
-            />
+            <div style={{ position: "relative", minHeight: 720 }}>
+            <CockpitPostcardShell
+              title="Next up"
+              eyebrow="task / event"
+              x={systemPositions.next.x}
+              y={systemPositions.next.y}
+              count="move"
+              onPointerDown={(event) => startDrag({ id: "next", ...systemPositions.next }, "system", event)}
+            >
+              <div style={{ padding: "16px 16px 14px", display: "flex", flexDirection: "column", gap: 16, background: "#fffdf8", flex: 1 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <ArrowDown size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", marginBottom: 3 }}>next task</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1.18 }}>
+                      {activeTask ? activeTask.title : "No active focus task"}
+                    </div>
+                    {activeTask && (
+                      <div className="mono" style={{ fontSize: 9, color: "#66666a", marginTop: 4 }}>
+                        weight: {weightForTask(activeTask.title)} · due {activeTask.due || "today"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: "1px solid rgba(12, 12, 14, 0.12)", paddingTop: 14 }}>
+                  <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", marginBottom: 3 }}>next event</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.22 }}>
+                    {upcomingEvent ? upcomingEvent.label : "No upcoming event"}
+                  </div>
+                  {upcomingEvent && (
+                    <div className="mono" style={{ fontSize: 9, color: "#66666a", marginTop: 4 }}>
+                      {upcomingEvent.start} - {upcomingEvent.end}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CockpitPostcardShell>
+
+            <CockpitPostcardShell
+              title="Problem space"
+              eyebrow="open loops"
+              x={systemPositions.problems.x}
+              y={systemPositions.problems.y}
+              count={`${activeProblems.length} items`}
+              onPointerDown={(event) => startDrag({ id: "problems", ...systemPositions.problems }, "system", event)}
+            >
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fffdf8" }}>
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  flex: 1,
+                  padding: "10px 12px 12px",
+                }}>
+                  {activeProblems.length === 0 ? (
+                    <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "22px 0", textAlign: "center" }}>
+                      all problems solved
+                    </div>
+                  ) : (
+                    activeProblems.map((problem) => (
+                      <div key={problem.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, borderBottom: "1px solid rgba(12, 12, 14, 0.08)", fontSize: 13, lineHeight: 1.25 }}>
+                        <button
+                          onClick={() => solveProblem(problem.id)}
+                          title="Mark solved"
+                          style={{ width: 16, height: 16, border: "2px solid #000000", background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
+                        />
+                        <span>{problem.text}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <form onSubmit={addProblem} style={{ borderTop: "1px solid rgba(12, 12, 14, 0.18)", background: "#ffffff" }}>
+                  <input
+                    value={newProblem}
+                    onChange={(e) => setNewProblem(e.target.value)}
+                    placeholder="+ Add problem..."
+                    style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
+                  />
+                </form>
+              </div>
+            </CockpitPostcardShell>
+
+            {cards.map((card) => (
+              <CockpitPostcardShell
+                key={card.id}
+                title={card.title}
+                eyebrow="postcard"
+                x={card.x}
+                y={card.y}
+                count={`${card.items.filter((item) => !item.done).length} open`}
+                onPointerDown={(event) => startDrag(card, "user", event)}
+              >
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fffdf8" }}>
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    flex: 1,
+                    minHeight: 130,
+                    padding: "10px 12px 12px",
+                  }}>
+                    {card.items.length === 0 ? (
+                      <div className="mono" style={{ fontSize: 10, color: "#888", textAlign: "center", padding: "20px 0" }}>
+                        Add what belongs here.
+                      </div>
+                    ) : (
+                      card.items.map((item) => (
+                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, borderBottom: "1px solid rgba(12, 12, 14, 0.08)" }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleCardItem(card.id, item.id)}
+                            style={{
+                              width: 16,
+                              height: 16,
+                              border: "2px solid #000000",
+                              background: item.done ? "#7dd3fc" : "transparent",
+                              cursor: "pointer",
+                              display: "grid",
+                              placeItems: "center",
+                              padding: 0,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {item.done && <Check size={9} />}
+                          </button>
+                          <span style={{ flex: 1, fontSize: 13, lineHeight: 1.2, textDecoration: item.done ? "line-through" : "none", color: item.done ? "#777770" : "inherit" }}>
+                            {item.text}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => deleteCardItem(card.id, item.id)}
+                            title="Delete item"
+                            style={{ border: "none", background: "transparent", color: "#b24444", cursor: "pointer", padding: 2 }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", borderTop: "1px solid rgba(12, 12, 14, 0.18)", background: "#ffffff" }}>
+                    <input
+                      placeholder="+ Add item..."
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          addCardItem(card.id, event.currentTarget.value);
+                          event.currentTarget.value = "";
+                        }
+                      }}
+                      style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => deleteCard(card.id)}
+                      title="Delete postcard"
+                      style={{ border: "none", background: "#ffffff", color: "#b24444", padding: "0 12px", cursor: "pointer" }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </CockpitPostcardShell>
+            ))}
+            </div>
           </div>
         </div>
       </main>

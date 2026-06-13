@@ -14,6 +14,7 @@ import {
 } from "@/lib/telegram";
 import { clearPending, getPending, setPending } from "@/lib/telegram-pending";
 import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
+import { getDefaultOwnerDb } from "@/lib/owner-scope";
 
 /** Extend invocation until `after()` tasks finish (LLM + Telegram API). */
 export const maxDuration = 60;
@@ -63,7 +64,7 @@ async function processCallbackQuery(body: Record<string, unknown>) {
         await sendTelegramMessage(chatId, "No pending item to save. Send a new message first.");
         return;
       }
-      const message = await applyParsedAction(pending.action, pending.date);
+      const message = await applyParsedAction(pending.action, pending.date, await getDefaultOwnerDb());
       await clearPending(chatId);
       await sendTelegramMessage(chatId, `✓ ${message}`);
     }
@@ -94,7 +95,7 @@ async function processMessage(
           await sendTelegramMessage(chatId, "No pending item to save. Send a food line or /food command.");
           return;
         }
-        const message = await applyParsedAction(pending.action, pending.date);
+        const message = await applyParsedAction(pending.action, pending.date, await getDefaultOwnerDb());
         await clearPending(chatId);
         await sendTelegramMessage(chatId, `✓ ${message}`);
         return;
@@ -102,7 +103,7 @@ async function processMessage(
 
       if (isDirectSlashCommand(text)) {
         const action = await parseNaturalLanguage(text, `${today} ${now} (${weekday})`);
-        const message = await applyParsedAction(action, today);
+        const message = await applyParsedAction(action, today, await getDefaultOwnerDb());
         await clearPending(chatId);
         await sendTelegramMessage(chatId, `✓ ${message}`);
         return;

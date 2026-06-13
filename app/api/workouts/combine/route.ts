@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getUserScopedDb } from "@/lib/owner-scope";
 
 interface ExerciseSet {
   id: string;
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "At least two workout IDs are required to combine." }, { status: 400 });
     }
 
-    const supabase = createAdminClient();
+    const { supabase, ownerUserId } = await getUserScopedDb();
 
     // 1. Fetch the workouts and their exercises to combine
     const { data: workouts, error: fetchErr } = await supabase
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
           notes
         )
       `)
+      .eq("owner_user_id", ownerUserId)
       .in("id", workoutIds) as { data: WorkoutWithExercises[] | null; error: any };
 
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -86,7 +87,8 @@ export async function POST(req: NextRequest) {
     const { error: delPrimaryErr } = await supabase
       .from("workout_exercises")
       .delete()
-      .eq("workout_id", primaryWorkoutId);
+      .eq("workout_id", primaryWorkoutId)
+      .eq("owner_user_id", ownerUserId);
 
     if (delPrimaryErr) return NextResponse.json({ error: delPrimaryErr.message }, { status: 500 });
 
@@ -94,6 +96,7 @@ export async function POST(req: NextRequest) {
     const setRows = mergedExercises.flatMap((ex) =>
       ex.sets.map((s, si) => ({
         workout_id: primaryWorkoutId,
+        owner_user_id: ownerUserId,
         exercise_name: ex.name,
         set_number: si + 1,
         reps: s.reps,
@@ -111,6 +114,7 @@ export async function POST(req: NextRequest) {
     const { error: delOthersErr } = await supabase
       .from("workouts")
       .delete()
+      .eq("owner_user_id", ownerUserId)
       .in("id", otherWorkoutIds);
 
     if (delOthersErr) return NextResponse.json({ error: delOthersErr.message }, { status: 500 });

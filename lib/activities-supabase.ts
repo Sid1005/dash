@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { type DbScope, resolveDbScope } from "@/lib/owner-scope";
 import { currentIstTime } from "@/lib/time";
 
 export type ActivityActor = "telegram" | "agent" | "calendar" | "system" | "user";
@@ -64,11 +64,12 @@ function isMissingTableError(error: { code?: string; message?: string }) {
   );
 }
 
-export async function listActivitiesForDate(date: string): Promise<ActivityEntry[]> {
-  const supabase = createAdminClient();
+export async function listActivitiesForDate(date: string, scope?: DbScope): Promise<ActivityEntry[]> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
   const { data, error } = await supabase
     .from("activities")
     .select("*")
+    .eq("owner_user_id", ownerUserId)
     .eq("occurred_date", date)
     .order("time_local", { ascending: true })
     .order("created_at", { ascending: true });
@@ -80,19 +81,23 @@ export async function listActivitiesForDate(date: string): Promise<ActivityEntry
   return ((data ?? []) as ActivityRow[]).map(rowToEntry);
 }
 
-export async function deleteActivity(id: string): Promise<void> {
-  const { error } = await createAdminClient()
+export async function deleteActivity(id: string, scope?: DbScope): Promise<void> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
+  const { error } = await supabase
     .from("activities")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("owner_user_id", ownerUserId);
   if (error) throw new Error(error.message);
 }
 
-export async function insertActivity(date: string, input: ActivityInput): Promise<ActivityEntry> {
+export async function insertActivity(date: string, input: ActivityInput, scope?: DbScope): Promise<ActivityEntry> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
   const body = input.body.trim();
   if (!body) throw new Error("Activity body is required.");
 
   const payload = {
+    owner_user_id: ownerUserId,
     occurred_date: date,
     time_local: normalizeTime(input.time),
     actor: input.actor ?? "telegram",
@@ -102,7 +107,7 @@ export async function insertActivity(date: string, input: ActivityInput): Promis
     metadata: input.metadata ?? {},
   };
 
-  const { data, error } = await createAdminClient()
+  const { data, error } = await supabase
     .from("activities")
     .insert(payload)
     .select("*")
