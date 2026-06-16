@@ -5,7 +5,6 @@ import { insertProblem } from "./problems-supabase";
 import { insertIdea, listUniqueCategories } from "./ideas-supabase";
 import { classifyIdea } from "./classify-idea";
 import { insertFoodEntry } from "./food-supabase";
-import { insertActivity } from "./activities-supabase";
 import { insertTimeBlock } from "./time-blocks-supabase";
 import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
@@ -15,7 +14,12 @@ const VALID_SPEND_CATEGORIES = new Set([
   "Food", "Transport", "Health", "Entertainment", "Shopping", "Other",
 ]);
 
-const VALID_ACTIVITY_KINDS = new Set(["note", "activity", "agent_event"]);
+type TaskInput = {
+  title: string;
+  due_date?: string;
+  due_time?: string;
+  due_in_minutes?: number;
+};
 
 function normalizeSpendCategory(raw: string): string {
   if (!raw) return "Other";
@@ -53,7 +57,7 @@ function formatDateLabel(dateStr?: string): string {
 
 async function insertTaskEntry(
   baseDate: string,
-  taskData: { title: string; due_date?: string; due_time?: string; due_in_minutes?: number },
+  taskData: TaskInput,
   scope: DbScope
 ): Promise<{ title: string; label: string }> {
   const title = taskData.title ?? "Untitled task";
@@ -122,6 +126,14 @@ export async function applyParsedAction(
     return `Logged ${entry.name}: ${entry.calories} cal, ${entry.protein_g}g protein${est}`;
   }
 
+  if (type === "multiple_food") {
+    const entries = (data.entries ?? []) as FoodEntry[];
+    const saved = await Promise.all(entries.map((entry) => insertFoodEntry(targetDate, entry, dbScope)));
+    const calories = saved.reduce((sum, entry) => sum + (Number(entry.calories) || 0), 0);
+    const protein = saved.reduce((sum, entry) => sum + (Number(entry.protein_g) || 0), 0);
+    return `Logged ${saved.length} food items: ${Math.round(calories)} cal, ${Math.round(protein)}g protein`;
+  }
+
   if (type === "spending") {
     const entry: SpendEntry = {
       ...(data as unknown as SpendEntry),
@@ -171,7 +183,7 @@ export async function applyParsedAction(
   }
 
   if (type === "task") {
-    const { title, label } = await insertTaskEntry(targetDate, data as any, dbScope);
+    const { title, label } = await insertTaskEntry(targetDate, data as unknown as TaskInput, dbScope);
     return `Task added: "${title}" due ${label}`;
   }
 
@@ -217,7 +229,7 @@ export async function applyParsedAction(
     if (wkErr) throw new Error(wkErr.message);
 
     // Insert one row per set per exercise
-    const setRows = exercises.flatMap((ex, _i) =>
+    const setRows = exercises.flatMap((ex) =>
       ex.sets.map((s, si) => ({
         workout_id: wk.id,
         owner_user_id: dbScope.ownerUserId,
@@ -241,19 +253,7 @@ export async function applyParsedAction(
     return (data.response as string) || "I am not sure what you mean.";
   }
 
-  const text = extractText(data) || JSON.stringify(data);
-  const kind = typeof data.kind === "string" && VALID_ACTIVITY_KINDS.has(data.kind)
-    ? (data.kind as "note" | "activity" | "agent_event")
-    : "note";
-
-  await insertActivity(targetDate, {
-    actor: "telegram",
-    kind,
-    verb: "noted",
-    body: text,
-    time: typeof data.time === "string" ? data.time : undefined,
-  }, dbScope);
-  return `Activity noted: "${text.slice(0, 60)}"`;
+  return "I did not save this because generic notes are disabled.";
 }
 
 export async function handleNaturalLanguage(
@@ -287,11 +287,23 @@ export function formatActionPreview(action: ParsedAction): string {
     return `I found *${entry.name}*${dateLabel} -> *${entry.calories} cal*, *${entry.protein_g}g protein*${est}.\nNote it down? Reply *yes* or *no*.`;
   }
 
+  if (type === "multiple_food") {
+    const entries = (data.entries ?? []) as FoodEntry[];
+    const dateLabel = formatDateLabel(data.date as string);
+    const calories = entries.reduce((sum, entry) => sum + (Number(entry.calories) || 0), 0);
+    const protein = entries.reduce((sum, entry) => sum + (Number(entry.protein_g) || 0), 0);
+    const preview = entries.slice(0, 8).map((entry) => `*${entry.name}* -> ${entry.calories} cal, ${entry.protein_g}g protein`).join("\n");
+    const more = entries.length > 8 ? `\n…and ${entries.length - 8} more` : "";
+    return `I found ${entries.length} food items${dateLabel} -> *${Math.round(calories)} cal*, *${Math.round(protein)}g protein* estimated total.\n${preview}${more}\nNote them down? Reply *yes* or *no*.`;
+  }
+
   if (type === "food_and_spending") {
     const f = data.food as unknown as FoodEntry;
     const s = data.spending as unknown as SpendEntry;
     const est = f.estimated ? " (estimated)" : "";
-    const dateLabel = formatDateLabel((data.date as string) || (data.spending as any)?.date || (data.food as any)?.date);
+    const spendingDate = (data.spending as { date?: string } | undefined)?.date;
+    const foodDate = (data.food as { date?: string } | undefined)?.date;
+    const dateLabel = formatDateLabel((data.date as string) || spendingDate || foodDate);
     return `I found *${f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *₹${s.amount}* spend${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
@@ -377,6 +389,5 @@ export function formatActionPreview(action: ParsedAction): string {
     return data.response as string;
   }
 
-  const dateLabel = formatDateLabel(data.date as string);
-  return `I parsed this as a note${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
+  return "I could not classify this as a supported log, so I did not save it.";
 }
