@@ -46,7 +46,10 @@ export async function proxy(request: NextRequest) {
     path.includes("sitemap.xml");
 
   const apiKey = request.headers.get("x-api-key");
-  const isSystemCron = apiKey && apiKey === process.env.TELEGRAM_WEBHOOK_SECRET;
+  const isSystemCron =
+    !!apiKey &&
+    (apiKey === process.env.TELEGRAM_WEBHOOK_SECRET ||
+      apiKey === process.env.QUICK_LOG_SECRET);
 
   if (!user && isApiRoute && !isTelegramApi && !isSystemCron) {
     return NextResponse.json(
