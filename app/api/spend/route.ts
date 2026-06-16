@@ -61,9 +61,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Structured path: instant insert, no LLM round-trip.
-    const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
-    if (!Number.isFinite(amount) || amount < 0) {
-      return NextResponse.json({ error: "amount must be a non-negative number" }, { status: 400 });
+    // Tolerate strings with currency symbols / commas / spaces, e.g. "₹1,250.00".
+    const rawAmount = body.amount;
+    const amount =
+      typeof rawAmount === "number"
+        ? rawAmount
+        : Number(String(rawAmount ?? "").replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json(
+        {
+          error: "amount must be a non-negative number",
+          hint: "Send either {\"input\":\"spent 50 on coffee\"} or {\"amount\":50,\"item\":\"coffee\"}.",
+          received: body,
+        },
+        { status: 400 }
+      );
     }
     const item = typeof body.item === "string" && body.item.trim() ? body.item.trim().slice(0, 200) : "Spend";
     const category = normalizeCategory(body.category);
