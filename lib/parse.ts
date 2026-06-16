@@ -38,8 +38,12 @@ Current time: {now}
 General guidelines:
 - For diet / food logs:
   - Be conservative when guessing calories and protein_g. Single casual meal protein rarely exceeds 35-40g. Lean meat portions: 22-28g protein. Bowl of oatmeal: 8-14g protein.
-- For notes / journals:
-  - Use log_journal_note for completed actions without duration (e.g., "10 pushups done", "wrote diary"). Set kind to "activity".
+  - If the user sends a list of foods eaten across the day or multiple meals/items, use log_multiple_food. Estimate each item separately.
+  - Use log_food only for a single food item or single combined meal.
+- For workout logs:
+  - Use log_workout for gym/workout messages, exercise lists, or lines containing sets/reps/weights.
+- For unsupported notes / journals:
+  - Do not save generic notes or journal entries. Use chat_response to say the message was not saved and ask for a supported log type if needed.
 - For calendar time blocks:
   - If a time range is vague, use current time context to guess.
 - For tasks / to-do items:
@@ -84,6 +88,36 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           }
         },
         required: ["exercises"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "log_multiple_food",
+      description: "Log multiple foods or meals eaten from a single message.",
+      parameters: {
+        type: "object",
+        properties: {
+          entries: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Name of the food item, dish, or meal component." },
+                calories: { type: "number", description: "Calories in kcal." },
+                protein_g: { type: "number", description: "Protein in grams." },
+                estimated: { type: "boolean", description: "Set to true if macros are estimated from dish name/portion, false if exact values provided." },
+                cost: { type: "number", description: "Cost of the food if specified." },
+                time: { type: "string", description: "Time when food was eaten in 24-hour HH:MM format." },
+                meal: { type: "string", description: "breakfast, lunch, dinner, snack, etc." }
+              },
+              required: ["name", "calories", "protein_g", "estimated"]
+            }
+          },
+          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
+        },
+        required: ["entries"]
       }
     }
   },
@@ -323,23 +357,6 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "log_journal_note",
-      description: "Log a general note or activity.",
-      parameters: {
-        type: "object",
-        properties: {
-          text: { type: "string", description: "Content of the note." },
-          time: { type: "string", description: "Time in 24-hour HH:MM format if specified." },
-          kind: { type: "string", enum: ["note", "activity", "agent_event"], description: "Default is 'note'. Use 'activity' for completed actions without duration (e.g., '10 pushups done', 'meditated 10 mins')." },
-          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
-        },
-        required: ["text"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "chat_response",
       description: "Generate a conversational response when the user is chatting, asking a question, or providing conversational input.",
       parameters: {
@@ -356,6 +373,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
 export interface ParsedAction {
   type:
     | "food"
+    | "multiple_food"
     | "spending"
     | "multiple_spending"
     | "food_and_spending"
@@ -365,7 +383,6 @@ export interface ParsedAction {
     | "tasks"
     | "learning"
     | "idea"
-    | "note"
     | "workout"
     | "chat"
     | "problem";
@@ -434,11 +451,12 @@ If the user's input is a completely new command, ignore the pending action and p
           max_tokens: 1024,
         });
         break; // Success! Break the retry loop
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`[Parser] LLM attempt ${attempt} failed:`, err);
         
         // Do not retry on permanent client errors (4xx other than 429)
-        const status = err?.status || err?.statusCode;
+        const maybeError = err as { status?: number; statusCode?: number };
+        const status = maybeError.status || maybeError.statusCode;
         if (status && status >= 400 && status < 500 && status !== 429) {
           throw err;
         }
@@ -466,12 +484,12 @@ If the user's input is a completely new command, ignore the pending action and p
       if (text) {
         return { type: "chat", data: { response: text } };
       }
-      return { type: "note", data: { text: input } };
+      return { type: "chat", data: { response: "I could not classify that as a supported log, so I did not save it." } };
     }
 
     const toolCall = toolCalls[0];
     if (toolCall.type !== "function") {
-      return { type: "note", data: { text: input } };
+      return { type: "chat", data: { response: "I could not classify that as a supported log, so I did not save it." } };
     }
     const name = toolCall.function.name;
     const args = JSON.parse(toolCall.function.arguments || "{}");
@@ -483,6 +501,8 @@ If the user's input is a completely new command, ignore the pending action and p
         return { type: "workout", data: args };
       case "log_food":
         return { type: "food", data: args };
+      case "log_multiple_food":
+        return { type: "multiple_food", data: args };
       case "log_spending":
         return { type: "spending", data: args };
       case "log_multiple_spending":
@@ -503,14 +523,12 @@ If the user's input is a completely new command, ignore the pending action and p
         return { type: "idea", data: args };
       case "log_problem":
         return { type: "problem", data: args };
-      case "log_journal_note":
-        return { type: "note", data: args };
       case "chat_response":
       default:
         return { type: "chat", data: args };
     }
   } catch (err) {
-    console.error("[Parser] Tool calling parsing failed, returning raw input as note:", err);
-    return { type: "note", data: { text: input } };
+    console.error("[Parser] Tool calling parsing failed, not saving input:", err);
+    return { type: "chat", data: { response: "I could not classify that as a supported log, so I did not save it." } };
   }
 }
