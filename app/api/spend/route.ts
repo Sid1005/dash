@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
         {
           error: "amount must be a non-negative number",
           hint: "Send either {\"input\":\"spent 50 on coffee\"} or {\"amount\":50,\"item\":\"coffee\"}.",
-          received: body,
         },
         { status: 400 }
       );
