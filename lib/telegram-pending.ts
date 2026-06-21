@@ -17,7 +17,7 @@ const PENDING_FILE = VAULT
   : path.join(process.cwd(), ".telegram-pending.json");
 const TTL_MS = 15 * 60 * 1000;
 
-function useSupabase(): boolean {
+function hasSupabaseConfig(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
       (process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY)
@@ -45,7 +45,7 @@ function isFresh(record: PendingRecord): boolean {
 }
 
 export async function setPending(chatId: number, action: ParsedAction, date: string) {
-  if (useSupabase()) {
+  if (hasSupabaseConfig()) {
     const supabase = createAdminClient();
     const { error } = await supabase.from("telegram_pending").upsert(
       {
@@ -66,7 +66,7 @@ export async function setPending(chatId: number, action: ParsedAction, date: str
 }
 
 export async function getPending(chatId: number): Promise<PendingRecord | null> {
-  if (useSupabase()) {
+  if (hasSupabaseConfig()) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("telegram_pending")
@@ -103,7 +103,7 @@ export async function getPending(chatId: number): Promise<PendingRecord | null> 
 }
 
 export async function clearPending(chatId: number) {
-  if (useSupabase()) {
+  if (hasSupabaseConfig()) {
     const supabase = createAdminClient();
     await supabase.from("telegram_pending").delete().eq("chat_id", chatId);
     return;

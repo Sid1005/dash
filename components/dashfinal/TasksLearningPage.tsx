@@ -8,13 +8,12 @@ import {
   useDashData,
   TaskRow,
   LearningRow,
-  DashTask,
-  DashLearning,
   localIsoDate,
   dueLabel,
   weightForTask,
   DateNavigator,
 } from "./DashFinal";
+import type { DashLearning, DashTask } from "./types";
 
 export function TasksLearningPage() {
   const [date, setDate] = useState(() => localIsoDate());
@@ -152,8 +151,8 @@ export function TasksLearningPage() {
 
       setTaskTitle("");
       setTaskDueDate("");
-    } catch (err: any) {
-      setTaskError(err.message || "An error occurred");
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsSubmittingTask(false);
     }
@@ -176,8 +175,8 @@ export function TasksLearningPage() {
       }
       setLearningText("");
       setRefreshTrigger((prev) => prev + 1);
-    } catch (err: any) {
-      setLearningError(err.message || "An error occurred");
+    } catch (err: unknown) {
+      setLearningError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsSubmittingLearning(false);
     }

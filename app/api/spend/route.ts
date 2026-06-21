@@ -2,21 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleNaturalLanguage } from "@/lib/actions";
 import { getDefaultOwnerDb } from "@/lib/owner-scope";
 import { insertSpending } from "@/lib/spending-supabase";
+import { matchSpendCategory } from "@/lib/spending";
 import { currentIstDate, currentIstTime } from "@/lib/time";
 
 /** Reuse the LLM parser (categorization, multi-item) — allow it time to run. */
 export const maxDuration = 30;
-
-const VALID_CATEGORIES = ["Food", "Transport", "Health", "Entertainment", "Shopping", "Other"] as const;
-type Category = (typeof VALID_CATEGORIES)[number];
-
-function normalizeCategory(value: unknown): Category {
-  if (typeof value === "string") {
-    const match = VALID_CATEGORIES.find((c) => c.toLowerCase() === value.trim().toLowerCase());
-    if (match) return match;
-  }
-  return "Other";
-}
 
 /**
  * Token-authed spend ingress for one-tap clients (iOS Shortcut, widgets).
@@ -77,7 +67,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const item = typeof body.item === "string" && body.item.trim() ? body.item.trim().slice(0, 200) : "Spend";
-    const category = normalizeCategory(body.category);
+    const category = matchSpendCategory(body.category);
 
     const row = await insertSpending(date, { item, amount, category, time }, scope);
     return NextResponse.json({

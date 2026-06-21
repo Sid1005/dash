@@ -49,7 +49,7 @@ async function request(method, path, body = null) {
 }
 
 async function runTests() {
-  console.log('--- STARTING CRUD API TESTS ON LIVE SERVER ---');
+  console.log('--- STARTING CRUD INTEGRATION TESTS ON LOCAL SERVER ---');
   
   const testDate = '2026-05-21';
 

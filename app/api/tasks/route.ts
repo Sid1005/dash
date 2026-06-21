@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import type { TaskRow } from "@/lib/tasks-types";
 import { rolloverOverdueTasks } from "@/lib/tasks-rollover";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import { notifyHermesTaskUpsert } from "@/lib/hermes-reminders";
 
 export async function GET() {
   try {
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    after(() => notifyHermesTaskUpsert(data as TaskRow));
     return NextResponse.json({ task: data as TaskRow }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

@@ -1,4 +1,5 @@
 import { type FoodEntry, type SpendEntry } from "./types";
+import { after } from "next/server";
 import { insertSpending } from "./spending-supabase";
 import { insertLearning } from "./learnings-supabase";
 import { insertProblem } from "./problems-supabase";
@@ -8,6 +9,9 @@ import { insertFoodEntry } from "./food-supabase";
 import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
 import { currentIstDate } from "./time";
+import { notifyHermesTaskUpsert } from "./hermes-reminders";
+import type { TaskRow } from "./tasks-types";
+import { isSpendCategory } from "./spending";
 import {
   deleteTimeBlock,
   insertTimeBlock,
@@ -15,10 +19,6 @@ import {
   updateTimeBlock,
   type TimeBlockEntry,
 } from "./time-blocks-supabase";
-
-const VALID_SPEND_CATEGORIES = new Set([
-  "Food", "Transport", "Health", "Entertainment", "Shopping", "Other",
-]);
 
 type TaskInput = {
   title: string;
@@ -119,7 +119,7 @@ export async function prepareParsedAction(
 function normalizeSpendCategory(raw: string): string {
   if (!raw) return "Other";
   const capitalized = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-  if (VALID_SPEND_CATEGORIES.has(capitalized)) return capitalized;
+  if (isSpendCategory(capitalized)) return capitalized;
   const lower = raw.toLowerCase();
   if (lower.includes("food") || lower.includes("groceries") || lower.includes("eat") || lower.includes("restaurant") || lower.includes("coffee")) return "Food";
   if (lower.includes("transport") || lower.includes("uber") || lower.includes("grab") || lower.includes("taxi") || lower.includes("bus") || lower.includes("mrt")) return "Transport";
@@ -188,10 +188,13 @@ async function insertTaskEntry(
     }
   }
 
-  const { error } = await scope.supabase
+  const { data, error } = await scope.supabase
     .from("tasks")
-    .insert({ owner_user_id: scope.ownerUserId, title, due_at: dueDate.toISOString(), done: false });
+    .insert({ owner_user_id: scope.ownerUserId, title, due_at: dueDate.toISOString(), done: false })
+    .select("*")
+    .single();
   if (error) throw new Error(error.message);
+  after(() => notifyHermesTaskUpsert(data as TaskRow));
 
   const label =
     Number.isFinite(dueInMinutes) && dueInMinutes >= 0

@@ -1,21 +1,8 @@
 import OpenAI from "openai";
+import { getGroqClient, GROQ_MODEL } from "@/lib/groq";
+import { SPEND_CATEGORIES } from "@/lib/spending";
 
-let groqClient: OpenAI | undefined;
 let openCodeClient: OpenAI | undefined;
-
-function getGroqClient(): OpenAI {
-  if (!groqClient) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing GROQ_API_KEY. Add it in env for natural-language parsing.");
-    }
-    groqClient = new OpenAI({
-      apiKey,
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-  }
-  return groqClient;
-}
 
 function getOpenCodeClient(): OpenAI {
   if (!openCodeClient) {
@@ -162,7 +149,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
         properties: {
           item: { type: "string", description: "Description of what was purchased." },
           amount: { type: "number", description: "Amount spent." },
-          category: { type: "string", enum: ["Food", "Transport", "Health", "Entertainment", "Shopping", "Other"], description: "Category of the spend (Food, Transport, Health, Entertainment, Shopping, Other)." },
+          category: { type: "string", enum: [...SPEND_CATEGORIES], description: "Category of the spend (Food, Transport, Health, Entertainment, Shopping, Other)." },
           time: { type: "string", description: "Time when spent in 24-hour HH:MM format." },
           date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
         },
@@ -185,7 +172,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
               properties: {
                 item: { type: "string", description: "Description of what was purchased." },
                 amount: { type: "number", description: "Amount spent." },
-                category: { type: "string", enum: ["Food", "Transport", "Health", "Entertainment", "Shopping", "Other"], description: "Category of the spend (Food, Transport, Health, Entertainment, Shopping, Other)." },
+                category: { type: "string", enum: [...SPEND_CATEGORIES], description: "Category of the spend (Food, Transport, Health, Entertainment, Shopping, Other)." },
                 time: { type: "string", description: "Time when spent in 24-hour HH:MM format." }
               },
               required: ["item", "amount", "category"]
@@ -222,7 +209,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
             properties: {
               item: { type: "string" },
               amount: { type: "number" },
-              category: { type: "string", enum: ["Food", "Transport", "Health", "Entertainment", "Shopping", "Other"], description: "Category of the spend." },
+              category: { type: "string", enum: [...SPEND_CATEGORIES], description: "Category of the spend." },
               time: { type: "string", description: "Time in 24-hour HH:MM format." }
             },
             required: ["item", "amount", "category"]
@@ -419,7 +406,7 @@ export async function parseInput(
 ): Promise<ParsedAction> {
   const isVision = !!base64Image;
   const client = isVision ? getOpenCodeClient() : getGroqClient();
-  const modelName = isVision ? "kimi-k2.6" : "openai/gpt-oss-120b";
+  const modelName = isVision ? "kimi-k2.6" : GROQ_MODEL;
 
   try {
     let response;

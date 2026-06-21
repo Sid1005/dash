@@ -1,20 +1,4 @@
-import OpenAI from "openai";
-
-let groqClient: OpenAI | undefined;
-
-function getGroqClient(): OpenAI {
-  if (!groqClient) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing GROQ_API_KEY in env.");
-    }
-    groqClient = new OpenAI({
-      apiKey,
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-  }
-  return groqClient;
-}
+import { getGroqClient, GROQ_MODEL } from "@/lib/groq";
 
 /**
  * Dynamically classifies a new idea. It either maps it to an existing category
@@ -40,7 +24,7 @@ Rules:
 
   try {
     const response = await client.chat.completions.create({
-      model: "openai/gpt-oss-120b", // Use same model as other natural language processing in this codebase
+      model: GROQ_MODEL,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Idea: "${text}"` }

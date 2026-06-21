@@ -43,7 +43,6 @@ export default function WorkoutsPage() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [viewDate, setViewDate] = useState(() => new Date(date));
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
 
@@ -171,11 +170,6 @@ export default function WorkoutsPage() {
     }
   };
 
-  // Sync calendar view when date changes
-  useEffect(() => {
-    setViewDate(new Date(date));
-  }, [date]);
-
 
   // Load workouts
   const loadWorkouts = async () => {
@@ -234,11 +228,6 @@ export default function WorkoutsPage() {
     return workouts.find((w) => w.id === selectedWorkoutId) || null;
   }, [workouts, selectedWorkoutId]);
 
-  // Set of workout dates for the calendar dots
-  const workoutDates = useMemo(() => {
-    return new Set(workouts.map((w) => w.occurred_date));
-  }, [workouts]);
-
   // Recent 5 workouts
   const recentWorkouts = useMemo(() => {
     return [...workouts]
@@ -246,65 +235,7 @@ export default function WorkoutsPage() {
       .slice(0, 5);
   }, [workouts]);
 
-  // Calendar logic
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(year, month, 1);
-    const startDayOfWeek = firstDay.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-    const result: { isoStr: string; isCurrentMonth: boolean; dayNum: number }[] = [];
-
-    // Prepend previous month days
-    for (let i = startDayOfWeek - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1, daysInPrevMonth - i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: daysInPrevMonth - i,
-      });
-    }
-
-    // Add current month days
-    for (let i = 1; i <= daysInMonth; i++) {
-      const d = new Date(year, month, i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: true,
-        dayNum: i,
-      });
-    }
-
-    // Pad next month days to multiples of 7
-    const totalCells = Math.ceil(result.length / 7) * 7;
-    const padDays = totalCells - result.length;
-    for (let i = 1; i <= padDays; i++) {
-      const d = new Date(year, month + 1, i);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: i,
-      });
-    }
-
-    // Keep grid height stable at exactly 6 rows (42 cells)
-    while (result.length < 42) {
-      const nextDayIdx = result.length - startDayOfWeek - daysInMonth + 1;
-      const d = new Date(year, month + 1, nextDayIdx);
-      result.push({
-        isoStr: localIsoDate(d),
-        isCurrentMonth: false,
-        dayNum: nextDayIdx,
-      });
-    }
-
-    return result;
-  }, [year, month]);
-
-  // Handlers
+    // Handlers
   const handleAddSet = (e: React.FormEvent) => {
     e.preventDefault();
     const reps = parseInt(repsInput, 10);
@@ -352,7 +283,7 @@ export default function WorkoutsPage() {
 
   const handleSaveWorkout = async () => {
     setActionLoading(true);
-    let finalExercises = [...configuredExercises];
+    const finalExercises = [...configuredExercises];
 
     // If there is an exercise in progress, auto-include it to prevent data loss
     if (currentExerciseName.trim() && currentSets.length > 0) {
@@ -428,7 +359,7 @@ export default function WorkoutsPage() {
   const formattedSelectedDate = useMemo(() => {
     try {
       return format(new Date(`${date}T12:00:00`), "EEEE, MMMM d, yyyy");
-    } catch (e) {
+    } catch {
       return date;
     }
   }, [date]);
@@ -528,7 +459,7 @@ export default function WorkoutsPage() {
                     if (w.created_at) {
                       try {
                         timeLabel = format(parseISO(w.created_at), "h:mm a");
-                      } catch (e) {}
+                      } catch {}
                     }
                     return (
                       <button

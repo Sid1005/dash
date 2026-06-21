@@ -65,8 +65,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const body = await req.json();
-  const { date, type, id, index } = body;
-  const d = date ?? currentIstDate();
+  const { type, id } = body;
   const scope = await getUserScopedDb();
 
   if (type === "food") {

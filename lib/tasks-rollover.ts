@@ -42,7 +42,7 @@ export async function rolloverOverdueTasks(scope?: DbScope) {
   const loggedTaskIds = new Set<string>();
   if (existingLogs) {
     for (const log of existingLogs) {
-      const meta = log.metadata as Record<string, any>;
+      const meta = log.metadata as Record<string, unknown>;
       if (meta && typeof meta.taskId === "string") {
         loggedTaskIds.add(meta.taskId);
       }
@@ -50,7 +50,7 @@ export async function rolloverOverdueTasks(scope?: DbScope) {
   }
 
   const idsToUpdate: string[] = [];
-  const activitiesToInsert: any[] = [];
+  const activitiesToInsert: Array<Record<string, unknown>> = [];
   const currentTime = currentIstTime();
 
   for (const task of overdueTasks) {

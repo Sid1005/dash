@@ -1,5 +1,6 @@
-import OpenAI from "openai";
 import { type DbScope } from "@/lib/owner-scope";
+import { fallbackDateRange } from "@/lib/date-range";
+import { getGroqClient, GROQ_MODEL } from "@/lib/groq";
 
 type TelegramIntent = "log" | "question";
 type Domain = "workouts" | "food" | "spending" | "calendar" | "ideas";
@@ -85,25 +86,8 @@ type PersonalDataBundle = {
   ideas?: IdeaRow[];
 };
 
-const GROQ_MODEL = "openai/gpt-oss-120b";
 const MAX_RECORDS_PER_DOMAIN = 120;
 const ALL_DOMAINS: Domain[] = ["workouts", "food", "spending", "calendar", "ideas"];
-
-let groqClient: OpenAI | undefined;
-
-function getGroqClient(): OpenAI {
-  if (!groqClient) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing GROQ_API_KEY. Add it in env for Telegram intelligence.");
-    }
-    groqClient = new OpenAI({
-      apiKey,
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-  }
-  return groqClient;
-}
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {
@@ -130,29 +114,6 @@ function isValidDateString(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-function parseDate(date: string): Date {
-  return new Date(`${date}T00:00:00+05:30`);
-}
-
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function startOfIstWeek(date: Date): Date {
-  const day = date.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  return addDays(date, mondayOffset);
-}
-
 function fallbackDomains(input: string): Domain[] {
   const lower = input.toLowerCase();
   const domains = new Set<Domain>();
@@ -172,55 +133,6 @@ function fallbackDomains(input: string): Domain[] {
     domains.add("ideas");
   }
   return domains.size > 0 ? Array.from(domains) : ALL_DOMAINS;
-}
-
-function fallbackDateRange(input: string, today: string): Pick<QuestionPlan, "startDate" | "endDate"> {
-  const lower = input.toLowerCase();
-  const todayDate = parseDate(today);
-
-  if (lower.includes("all ideas") || lower.includes("every idea")) {
-    return { startDate: "1970-01-01", endDate: today };
-  }
-
-  if (lower.includes("yesterday")) {
-    const yesterday = formatDate(addDays(todayDate, -1));
-    return { startDate: yesterday, endDate: yesterday };
-  }
-
-  if (lower.includes("today")) {
-    return { startDate: today, endDate: today };
-  }
-
-  if (lower.includes("last week")) {
-    const thisMonday = startOfIstWeek(todayDate);
-    const lastMonday = addDays(thisMonday, -7);
-    const lastSunday = addDays(thisMonday, -1);
-    return { startDate: formatDate(lastMonday), endDate: formatDate(lastSunday) };
-  }
-
-  if (lower.includes("this week")) {
-    const thisMonday = startOfIstWeek(todayDate);
-    return { startDate: formatDate(thisMonday), endDate: today };
-  }
-
-  if (lower.includes("last month")) {
-    const firstOfThisMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-    const firstOfLastMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1);
-    const lastOfLastMonth = addDays(firstOfThisMonth, -1);
-    return { startDate: formatDate(firstOfLastMonth), endDate: formatDate(lastOfLastMonth) };
-  }
-
-  if (lower.includes("this month")) {
-    const firstOfThisMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
-    return { startDate: formatDate(firstOfThisMonth), endDate: today };
-  }
-
-  const explicitDate = input.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
-  if (explicitDate) {
-    return { startDate: explicitDate, endDate: explicitDate };
-  }
-
-  return { startDate: formatDate(addDays(todayDate, -30)), endDate: today };
 }
 
 function fallbackIntent(input: string): IntentClassification {

@@ -8,7 +8,7 @@ import {
   localIsoDate,
   DateNavigator,
 } from "./DashFinal";
-import type { ActivityApiRow } from "./DashFinal";
+import type { ActivityApiRow } from "./types";
 
 function DeleteBtn({ onClick, label }: { onClick: () => void; label: string }) {
   return (
@@ -454,7 +454,7 @@ export function ActivitiesPage() {
                   <select
                     id="kind-select"
                     value={kind}
-                    onChange={(e) => setKind(e.target.value as any)}
+                    onChange={(e) => setKind(e.target.value as typeof kind)}
                     style={{
                       padding: "10px 12px",
                       background: "#ffffff",
@@ -487,7 +487,7 @@ export function ActivitiesPage() {
                   <select
                     id="actor-select"
                     value={actor}
-                    onChange={(e) => setActor(e.target.value as any)}
+                    onChange={(e) => setActor(e.target.value as typeof actor)}
                     style={{
                       padding: "10px 12px",
                       background: "#ffffff",

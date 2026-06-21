@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+.pytest_cache/
+__pycache__/
 
 # next.js
 /.next/
@@ -32,6 +34,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,6 +45,11 @@ next-env.d.ts
 
 # past conversations logs
 /past_conversations/
+
+# local runtime and CLI state
+/.telegram-pending.json
+/supabase/.temp/
+*.sqlite3
 
 # documentation and explanation files
 /*.html
