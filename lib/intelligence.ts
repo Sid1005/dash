@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { getCalendarEvents, type CalendarEvent } from "@/lib/composio";
 import { type DbScope } from "@/lib/owner-scope";
 
 type TelegramIntent = "log" | "question";
@@ -83,13 +82,11 @@ type PersonalDataBundle = {
   food?: FoodRow[];
   spending?: SpendingRow[];
   timeBlocks?: TimeBlockRow[];
-  calendarEvents?: CalendarEvent[];
   ideas?: IdeaRow[];
 };
 
 const GROQ_MODEL = "openai/gpt-oss-120b";
 const MAX_RECORDS_PER_DOMAIN = 120;
-const MAX_CALENDAR_DAYS = 31;
 const ALL_DOMAINS: Domain[] = ["workouts", "food", "spending", "calendar", "ideas"];
 
 let groqClient: OpenAI | undefined;
@@ -148,12 +145,6 @@ function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
-}
-
-function daysBetween(startDate: string, endDate: string): number {
-  const start = parseDate(startDate).getTime();
-  const end = parseDate(endDate).getTime();
-  return Math.max(0, Math.floor((end - start) / 86_400_000) + 1);
 }
 
 function startOfIstWeek(date: Date): Date {
@@ -437,18 +428,6 @@ async function fetchIdeas(scope: DbScope, startDate: string, endDate: string): P
   return (data ?? []) as IdeaRow[];
 }
 
-async function fetchCalendarEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
-  const dayCount = daysBetween(startDate, endDate);
-  if (dayCount > MAX_CALENDAR_DAYS) return [];
-
-  const eventsByDay = await Promise.all(
-    Array.from({ length: dayCount }, (_, index) =>
-      getCalendarEvents(formatDate(addDays(parseDate(startDate), index)))
-    )
-  );
-  return eventsByDay.flat().slice(0, MAX_RECORDS_PER_DOMAIN);
-}
-
 async function fetchPersonalData(scope: DbScope, plan: QuestionPlan): Promise<PersonalDataBundle> {
   const bundle: PersonalDataBundle = {
     dateRange: { start: plan.startDate, end: plan.endDate },
@@ -461,12 +440,7 @@ async function fetchPersonalData(scope: DbScope, plan: QuestionPlan): Promise<Pe
       if (domain === "food") bundle.food = await fetchFood(scope, plan.startDate, plan.endDate);
       if (domain === "spending") bundle.spending = await fetchSpending(scope, plan.startDate, plan.endDate);
       if (domain === "calendar") {
-        const [timeBlocks, calendarEvents] = await Promise.all([
-          fetchTimeBlocks(scope, plan.startDate, plan.endDate),
-          fetchCalendarEvents(plan.startDate, plan.endDate),
-        ]);
-        bundle.timeBlocks = timeBlocks;
-        bundle.calendarEvents = calendarEvents;
+        bundle.timeBlocks = await fetchTimeBlocks(scope, plan.startDate, plan.endDate);
       }
       if (domain === "ideas") bundle.ideas = await fetchIdeas(scope, plan.startDate, plan.endDate);
     })
@@ -488,7 +462,7 @@ export async function answerPersonalQuestion(
 Only use the provided JSON data. Do not invent missing records, dates, exercises, amounts, or calendar events.
 If the JSON has no relevant records, say that clearly and mention the date range checked.
 For spending, include totals when useful. For workouts, infer the user's requested focus from the question and exercise names, then include date, exercise, sets, reps, weights, and notes when present.
-For food, include calories/protein when useful. For calendar, include time blocks and Google Calendar events when present.
+For food, include calories/protein when useful. For calendar, include Dash schedule blocks when present.
 Telegram formatting rules:
 - Never use Markdown tables; Telegram renders them badly.
 - Write a compact answer card: bold title, date/range line, then grouped bullets.

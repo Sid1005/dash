@@ -22,8 +22,6 @@ export function CalendarPage() {
   const dayData = useDayView(date, refreshTrigger);
   const now = nowMinutes();
   const isToday = date === today;
-  const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState("");
 
   // Time Block form state
   const [blockTitle, setBlockTitle] = useState("");
@@ -36,28 +34,6 @@ export function CalendarPage() {
   const timeBlocks = useMemo(() => {
     return dayData?.blocks.filter((b) => b.kind === "blk") ?? [];
   }, [dayData]);
-
-  // Handler for adding Time Block
-  async function handleSyncCalendar() {
-    setSyncing(true);
-    setSyncError("");
-    try {
-      const res = await fetch("/api/calendar/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startDate: date, endDate: date }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to sync calendar");
-      }
-      setRefreshTrigger((prev) => prev + 1);
-    } catch (err: unknown) {
-      setSyncError(errorMessage(err, "Failed to sync calendar."));
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   async function handleAddTimeBlock(e: FormEvent) {
     e.preventDefault();
@@ -148,31 +124,9 @@ export function CalendarPage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                 {isToday && <span className="mono uc" style={{ fontSize: 9, color: "var(--blue)", letterSpacing: "0.15em" }}>today</span>}
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={handleSyncCalendar}
-                    disabled={syncing}
-                    className="mono uc"
-                    style={{
-                      height: 34,
-                      border: "1px solid var(--text)",
-                      background: syncing ? "var(--line)" : "var(--text)",
-                      color: syncing ? "var(--muted)" : "var(--bg)",
-                      cursor: syncing ? "wait" : "pointer",
-                      padding: "0 12px",
-                      fontSize: 9,
-                      letterSpacing: "0.12em",
-                      fontWeight: 800,
-                    }}
-                  >
-                    {syncing ? "syncing" : "sync"}
-                  </button>
-                  <DateNavigator selectedDate={date} onChange={setDate} compact />
-                </div>
+                <DateNavigator selectedDate={date} onChange={setDate} compact />
               </div>
             </div>
-            {syncError && <div style={errorStyle}>{syncError}</div>}
             <div style={timelineMetaStyle}>
               <span>15 min grid</span>
               <span>{dayData?.blocks.length ?? 0} events</span>

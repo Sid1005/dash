@@ -41,14 +41,6 @@ type TimeBlockApiRow = {
   category: string;
 };
 
-type CalendarApiRow = {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  location?: string;
-};
-
 type WorkoutExerciseApiRow = {
   exercise_name: string;
   reps: number;
@@ -238,17 +230,6 @@ export function fromMinutes(min: number) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-function isoToTime(iso: string) {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "00:00";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
-}
-
 export function dueLabel(iso: string) {
   const d = parseISO(iso);
   if (isNaN(d.getTime())) return "";
@@ -296,7 +277,6 @@ export function useDashData(
   options?: {
     includeLearnings?: boolean;
     includeTasks?: boolean;
-    includeCalendar?: boolean;
     includeProblems?: boolean;
     includeQuotes?: boolean;
     includeWorkouts?: boolean;
@@ -306,7 +286,6 @@ export function useDashData(
 
   const includeLearnings = options?.includeLearnings ?? true;
   const includeTasks = options?.includeTasks ?? true;
-  const includeCalendar = options?.includeCalendar ?? true;
   const includeProblems = options?.includeProblems ?? true;
   const includeQuotes = options?.includeQuotes ?? true;
   const includeWorkouts = options?.includeWorkouts ?? false;
@@ -323,10 +302,6 @@ export function useDashData(
       const tasksResPromise = includeTasks
         ? fetch("/api/tasks").then((r) => r.json()).catch(() => ({ tasks: [] }))
         : Promise.resolve({ tasks: [] });
-
-      const calendarResPromise = includeCalendar
-        ? fetch(`/api/calendar?date=${today}`).then((r) => r.json()).catch(() => ({ events: [] }))
-        : Promise.resolve({ events: [] });
 
       const problemsResPromise = includeProblems
         ? fetch("/api/problems").then((r) => r.json()).catch(() => ({ problems: [] }))
@@ -356,7 +331,6 @@ export function useDashData(
       const [
         dailyRes,
         tasksRes,
-        calendarRes,
         problemsRes,
         learningsRes,
         quotesRes,
@@ -364,7 +338,6 @@ export function useDashData(
       ] = await Promise.all([
         dailyResPromise,
         tasksResPromise,
-        calendarResPromise,
         problemsResPromise,
         learningsResPromise,
         quotesResPromise,
@@ -378,7 +351,6 @@ export function useDashData(
       const spending = (dailyRes.spending ?? []) as SpendApiRow[];
       const timeBlocks = (dailyRes.time_blocks ?? []) as TimeBlockApiRow[];
       const activities = (dailyRes.activities ?? []) as ActivityApiRow[];
-      const calendar = (calendarRes.events ?? []) as CalendarApiRow[];
       const allTasks = (tasksRes.tasks ?? []) as TaskApiRow[];
       const todayWorkouts = ((workoutsRes.workouts ?? []) as WorkoutApiRow[])
         .filter((workout) => workout.occurred_date === today);
@@ -407,15 +379,6 @@ export function useDashData(
         cat: b.category,
       }));
 
-      const calendarRows: DashBlock[] = calendar.map((event) => ({
-        kind: "cal",
-        id: event.id,
-        start: isoToTime(event.start),
-        end: isoToTime(event.end),
-        label: event.title,
-        loc: event.location,
-      }));
-
       const mealRows: DashBlock[] = food.map((f) => {
         const start = f.time || "12:00";
         return {
@@ -429,7 +392,7 @@ export function useDashData(
         };
       });
 
-      const blocks = sortBlocks([...blockRows, ...calendarRows, ...mealRows]).map((b) => ({
+      const blocks = sortBlocks([...blockRows, ...mealRows]).map((b) => ({
         ...b,
         current: toMinutes(b.start) <= now && toMinutes(b.end) > now,
       }));
@@ -515,12 +478,6 @@ export function useDashData(
           verb: "logged",
           obj: `${b.activity} ${b.start}-${b.end} (${b.category})`,
         })),
-        ...calendar.map<DashFeed>((e) => ({
-          t: isoToTime(e.start),
-          who: "calendar",
-          verb: "synced",
-          obj: e.title,
-        })),
         ...spending.map<DashFeed>((s) => ({
           t: s.time,
           who: "telegram",
@@ -580,7 +537,7 @@ export function useDashData(
     return () => {
       cancelled = true;
     };
-  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeCalendar, includeProblems, includeQuotes, includeWorkouts]);
+  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeProblems, includeQuotes, includeWorkouts]);
 
   return data;
 }
@@ -595,63 +552,20 @@ export function useDayView(date: string, refreshTrigger?: number): DayViewData |
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [dailyRes, calendarRes, tasksRes] = await Promise.all([
+      const [dailyRes, tasksRes] = await Promise.all([
         fetch(`/api/daily?date=${date}`).then((r) => r.json()).catch(() => ({})),
-        fetch(`/api/calendar?date=${date}`).then((r) => r.json()).catch(() => ({ events: [] })),
         fetch("/api/tasks").then((r) => r.json()).catch(() => ({ tasks: [] })),
       ]);
       if (cancelled) return;
 
       const timeBlocks = (dailyRes.time_blocks ?? []) as TimeBlockApiRow[];
-      const calendar = (calendarRes.events ?? []) as CalendarApiRow[];
       const allTasks = ((tasksRes.tasks ?? []) as TaskApiRow[]).filter((t) => !t.done);
 
       const blockRows: DashBlock[] = timeBlocks.map((b) => ({
         kind: "blk", id: b.id, start: b.start, end: b.end, label: b.activity, cat: b.category,
       }));
 
-      const dayStart = new Date(`${date}T00:00:00`);
-      const dayEnd = new Date(`${date}T23:59:59`);
-
-      const calRows: DashBlock[] = [];
-      for (const e of calendar) {
-        if (!e.start || !e.end) continue;
-
-        let evStart = e.start.length === 10 ? new Date(`${e.start}T00:00:00`) : new Date(e.start);
-        let evEnd = e.end.length === 10 ? new Date(`${e.end}T00:00:00`) : new Date(e.end);
-
-        // Adjust all-day events exclusive end date
-        if (e.end.length === 10) {
-          evEnd = new Date(evEnd.getTime() - 1000);
-        }
-
-        // Check if event overlaps with this day
-        if (evStart <= dayEnd && evEnd >= dayStart) {
-          // Clip event to this day
-          const clippedStart = new Date(Math.max(evStart.getTime(), dayStart.getTime()));
-          const clippedEnd = new Date(Math.min(evEnd.getTime(), dayEnd.getTime()));
-
-          const formatter = new Intl.DateTimeFormat("en-US", {
-            timeZone: "Asia/Kolkata",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          });
-          const startStr = formatter.format(clippedStart);
-          const endStr = formatter.format(clippedEnd);
-
-          calRows.push({
-            kind: "cal",
-            id: e.id,
-            start: startStr,
-            end: endStr,
-            label: e.title,
-            loc: e.location,
-          });
-        }
-      }
-
-      const blocks = sortBlocks([...blockRows, ...calRows]);
+      const blocks = sortBlocks(blockRows);
       const taskRows: DashTask[] = allTasks
         .filter((t) => localIsoDate(parseISO(t.due_at)) === date)
         .map((t) => ({
@@ -3075,7 +2989,6 @@ export function FoodSpendingPage() {
   const data = useDashData(date, refreshTrigger, {
     includeLearnings: false,
     includeTasks: false,
-    includeCalendar: false,
     includeProblems: false,
     includeQuotes: false,
   });

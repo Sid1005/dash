@@ -16,7 +16,6 @@
     "anthropic": "^0.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "composio-core": "^0.5.39",
     "date-fns": "^4.1.0",
     "gray-matter": "^4.0.3",
     "lucide-react": "^1.14.0",

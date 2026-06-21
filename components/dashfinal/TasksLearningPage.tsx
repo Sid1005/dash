@@ -22,7 +22,6 @@ export function TasksLearningPage() {
   const data = useDashData(date, refreshTrigger, {
     includeLearnings: true,
     includeTasks: true,
-    includeCalendar: false,
     includeProblems: false,
     includeQuotes: false,
   });

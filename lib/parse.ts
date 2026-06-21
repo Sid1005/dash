@@ -237,7 +237,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "create_calendar_event",
-      description: "Create a new Google Calendar event for a scheduled commitment, appointment, reservation, or meeting. When no end time is supplied, the event defaults to 30 minutes.",
+      description: "Create a new Dash calendar event for a scheduled commitment, appointment, reservation, or meeting. When no end time is supplied, the event defaults to 30 minutes.",
       parameters: {
         type: "object",
         properties: {
@@ -257,7 +257,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "update_calendar_event",
-      description: "Edit an existing Google Calendar event. Identify the existing event by its current title and date, and include only fields the user wants changed.",
+      description: "Edit an existing Dash calendar event. Identify the existing event by its current title and date, and include only fields the user wants changed.",
       parameters: {
         type: "object",
         properties: {
@@ -278,7 +278,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "delete_calendar_event",
-      description: "Delete or cancel an existing Google Calendar event. Identify it by its current title and date. Never use this to mark a task complete.",
+      description: "Delete or cancel an existing Dash calendar event. Identify it by its current title and date. Never use this to mark a task complete.",
       parameters: {
         type: "object",
         properties: {

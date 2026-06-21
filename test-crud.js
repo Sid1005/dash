@@ -132,54 +132,6 @@ async function runTests() {
 
 
   // ==========================================
-  // 3. CALENDAR EVENTS CRUD
-  // ==========================================
-  console.log('\nTesting GOOGLE CALENDAR EVENTS...');
-  const eventTitle = `Test Calendar Event ${Date.now()}`;
-  const startEvent = `${testDate}T14:00:00+05:30`;
-  const endEvent = `${testDate}T15:00:00+05:30`;
-
-  // Create
-  const createCalReq = await request('POST', '/api/calendar', {
-    title: eventTitle,
-    start: startEvent,
-    end: endEvent,
-    description: 'Automated test description',
-    location: 'Test Location'
-  });
-  console.log('POST /api/calendar Status:', createCalReq.status);
-  if (!createCalReq.body.ok) {
-    throw new Error('Failed to create calendar event: ' + JSON.stringify(createCalReq.body));
-  }
-  console.log('Calendar event created successfully.');
-
-  // List & Verify
-  const listCalReq = await request('GET', `/api/calendar?date=${testDate}`);
-  console.log('GET /api/calendar Status:', listCalReq.status);
-  const foundEvent = listCalReq.body.events.find(e => e.title === eventTitle);
-  if (!foundEvent) {
-    throw new Error('Created calendar event not found in list!');
-  }
-  console.log('Calendar event verified in list:', foundEvent);
-
-  // Delete
-  const delCalReq = await request('DELETE', '/api/calendar', { id: foundEvent.id });
-  console.log('DELETE /api/calendar Status:', delCalReq.status);
-  if (!delCalReq.body.ok) {
-    throw new Error('Failed to delete calendar event: ' + JSON.stringify(delCalReq.body));
-  }
-  console.log('Calendar event deleted successfully.');
-
-  // Verify Deleted
-  const listCalReq2 = await request('GET', `/api/calendar?date=${testDate}`);
-  const foundEvent2 = listCalReq2.body.events.find(e => e.title === eventTitle);
-  if (foundEvent2) {
-    throw new Error('Calendar event still exists after delete!');
-  }
-  console.log('Calendar event deletion verified.');
-
-
-  // ==========================================
   // 4. DAILY LOGS CRUD (Food, Spending, Time Blocks, Activities)
   // ==========================================
   console.log('\nTesting DAILY LOGS (Food, Spending, Time Blocks, Activities)...');
