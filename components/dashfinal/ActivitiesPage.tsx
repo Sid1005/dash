@@ -168,7 +168,6 @@ export function ActivitiesPage() {
   const data = useDashData(date, refreshTrigger, {
     includeLearnings: false,
     includeTasks: false,
-    includeCalendar: false,
     includeProblems: false,
     includeQuotes: false,
   });

@@ -37,6 +37,8 @@ type TimeBlockInput = {
   category?: string;
 };
 
+type TimeBlockUpdate = Partial<TimeBlockInput> & { date?: string };
+
 const TIME_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 
 function normalizeTime(time: string): string {
@@ -143,4 +145,44 @@ export async function deleteTimeBlock(id: string, scope?: DbScope): Promise<void
     .eq("owner_user_id", ownerUserId);
 
   if (error) throw new Error(error.message);
+}
+
+export async function updateTimeBlock(
+  id: string,
+  changes: TimeBlockUpdate,
+  scope?: DbScope
+): Promise<TimeBlockEntry> {
+  const { supabase, ownerUserId } = await resolveDbScope(scope);
+  const { data: current, error: readError } = await supabase
+    .from("time_blocks")
+    .select("*")
+    .eq("id", id)
+    .eq("owner_user_id", ownerUserId)
+    .single();
+
+  if (readError) throw new Error(readError.message);
+  const row = current as TimeBlockRow;
+  const start = changes.start === undefined ? row.start_local : normalizeTime(changes.start);
+  const end = changes.end === undefined ? row.end_local : normalizeTime(changes.end);
+  if (end <= start) throw new Error(`Time block end (${end}) must be after start (${start}).`);
+
+  const activity = changes.activity === undefined ? row.activity : changes.activity.trim();
+  if (!activity) throw new Error("Time block activity is required.");
+
+  const { data, error } = await supabase
+    .from("time_blocks")
+    .update({
+      occurred_date: changes.date ?? row.occurred_date,
+      start_local: start,
+      end_local: end,
+      activity,
+      category: changes.category === undefined ? row.category : normalizeCategory(changes.category),
+    })
+    .eq("id", id)
+    .eq("owner_user_id", ownerUserId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return rowToEntry(data as TimeBlockRow);
 }

@@ -9,16 +9,12 @@ import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
 import { currentIstDate } from "./time";
 import {
-  createCalendarEvent,
-  deleteCalendarEvent,
-  updateCalendarEvent,
-  type CalendarEvent,
-} from "./composio";
-import {
-  deleteCalendarEventByExternalId,
-  listCalendarEventsForDate,
-} from "./calendar-events-supabase";
-import { syncGoogleCalendarEventsForDate } from "./calendar-sync";
+  deleteTimeBlock,
+  insertTimeBlock,
+  listTimeBlocksForDate,
+  updateTimeBlock,
+  type TimeBlockEntry,
+} from "./time-blocks-supabase";
 
 const VALID_SPEND_CATEGORIES = new Set([
   "Food", "Transport", "Health", "Entertainment", "Shopping", "Other",
@@ -63,13 +59,13 @@ function defaultEventEnd(date: string, start: string): { end: string; endDate: s
   };
 }
 
-function findMatchingEvent(events: CalendarEvent[], query: string): CalendarEvent[] {
+function findMatchingEvent(events: TimeBlockEntry[], query: string): TimeBlockEntry[] {
   const normalizedQuery = normalizeEventTitle(query);
   if (!normalizedQuery) return [];
-  const exact = events.filter((event) => normalizeEventTitle(event.title) === normalizedQuery);
+  const exact = events.filter((event) => normalizeEventTitle(event.activity) === normalizedQuery);
   if (exact.length > 0) return exact;
   return events.filter((event) => {
-    const title = normalizeEventTitle(event.title);
+    const title = normalizeEventTitle(event.activity);
     return title.includes(normalizedQuery) || normalizedQuery.includes(title);
   });
 }
@@ -96,12 +92,12 @@ export async function prepareParsedAction(
 
   const eventDate = String(action.data.event_date || date);
   const eventTitle = String(action.data.event_title || "");
-  const matches = findMatchingEvent(await listCalendarEventsForDate(eventDate, scope), eventTitle);
+  const matches = findMatchingEvent(await listTimeBlocksForDate(eventDate, scope), eventTitle);
   if (matches.length === 0) {
     throw new Error(`I could not find a calendar event matching "${eventTitle}" on ${eventDate}.`);
   }
   if (matches.length > 1) {
-    const choices = matches.slice(0, 4).map((event) => `${event.title} (${eventLocalPart(event.start, "time")})`).join(", ");
+    const choices = matches.slice(0, 4).map((event) => `${event.activity} (${event.start})`).join(", ");
     throw new Error(`More than one event matched "${eventTitle}" on ${eventDate}: ${choices}. Please be more specific.`);
   }
 
@@ -111,11 +107,11 @@ export async function prepareParsedAction(
     data: {
       ...action.data,
       event_id: event.id,
-      current_title: event.title,
+      current_title: event.activity,
+      current_date: event.date,
       current_start: event.start,
       current_end: event.end,
-      current_location: event.location,
-      current_description: event.description,
+      current_category: event.category,
     },
   };
 }
@@ -271,21 +267,16 @@ export async function applyParsedAction(
 
   if (type === "calendar_event_create") {
     const eventDate = String(data.date || targetDate);
-    const start = localDateTime(eventDate, String(data.start));
     const defaultEnd = data.end ? null : defaultEventEnd(eventDate, String(data.start));
     const endTime = String(data.end || defaultEnd?.end);
     const endDate = String(data.end_date || defaultEnd?.endDate || eventDate);
-    const end = localDateTime(endDate, endTime);
-    if (new Date(end) <= new Date(start)) throw new Error("Calendar event end must be after its start.");
-    const ok = await createCalendarEvent({
-      title: String(data.title),
-      start,
-      end,
-      location: typeof data.location === "string" ? data.location : undefined,
-      description: typeof data.description === "string" ? data.description : undefined,
-    });
-    if (!ok) throw new Error("Google Calendar event creation failed.");
-    await syncGoogleCalendarEventsForDate(eventDate, dbScope);
+    if (endDate !== eventDate) throw new Error("Dash schedule blocks must start and end on the same day.");
+    await insertTimeBlock(eventDate, {
+      activity: String(data.title),
+      start: String(data.start),
+      end: endTime,
+      category: "Other",
+    }, dbScope);
     return `Event created: "${data.title}" on ${eventDate}, ${data.start}–${endTime}`;
   }
 
@@ -293,44 +284,38 @@ export async function applyParsedAction(
     const event = (await prepareParsedAction(action, targetDate, dbScope)).data;
     const currentStart = String(event.current_start);
     const currentEnd = String(event.current_end);
-    const currentDate = eventLocalPart(currentStart, "date");
+    const currentDate = String(event.current_date || event.event_date || targetDate);
     const nextDate = String(event.new_date || currentDate);
-    const currentDuration = new Date(currentEnd).getTime() - new Date(currentStart).getTime();
-    let start: string | undefined;
-    let end: string | undefined;
+    const currentDuration = new Date(localDateTime(currentDate, currentEnd)).getTime()
+      - new Date(localDateTime(currentDate, currentStart)).getTime();
+    let start: string | undefined = typeof event.new_start === "string" ? event.new_start : undefined;
+    let end: string | undefined = typeof event.new_end === "string" ? event.new_end : undefined;
 
     if (event.new_start || event.new_date) {
-      start = localDateTime(nextDate, String(event.new_start || eventLocalPart(currentStart, "time")));
-      end = event.new_end
-        ? localDateTime(nextDate, String(event.new_end))
-        : new Date(new Date(start).getTime() + currentDuration).toISOString();
-    } else if (event.new_end) {
-      end = localDateTime(nextDate, String(event.new_end));
+      start = String(event.new_start || currentStart);
+      if (!event.new_end) {
+        end = eventLocalPart(
+          new Date(new Date(localDateTime(nextDate, start)).getTime() + currentDuration).toISOString(),
+          "time"
+        );
+      }
     }
-    if (start && end && new Date(end) <= new Date(start)) {
+    if (start && end && end <= start) {
       throw new Error("Updated calendar event end must be after its start.");
     }
 
-    const ok = await updateCalendarEvent({
-      eventId: String(event.event_id),
-      title: typeof event.new_title === "string" ? event.new_title : undefined,
+    await updateTimeBlock(String(event.event_id), {
+      activity: typeof event.new_title === "string" ? event.new_title : undefined,
+      date: nextDate,
       start,
       end,
-      location: typeof event.new_location === "string" ? event.new_location : undefined,
-      description: typeof event.new_description === "string" ? event.new_description : undefined,
-    });
-    if (!ok) throw new Error("Google Calendar event update failed.");
-    await Promise.all(
-      Array.from(new Set([currentDate, nextDate]), (syncDate) => syncGoogleCalendarEventsForDate(syncDate, dbScope))
-    );
+    }, dbScope);
     return `Event updated: "${event.new_title || event.current_title}"`;
   }
 
   if (type === "calendar_event_delete") {
     const event = (await prepareParsedAction(action, targetDate, dbScope)).data;
-    const ok = await deleteCalendarEvent(String(event.event_id));
-    if (!ok) throw new Error("Google Calendar event deletion failed.");
-    await deleteCalendarEventByExternalId(String(event.event_id), dbScope);
+    await deleteTimeBlock(String(event.event_id), dbScope);
     return `Event deleted: "${event.current_title}"`;
   }
 
