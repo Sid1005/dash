@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO, subDays } from "date-fns";
-import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ArrowDown, Layers, RotateCcw, Check, Plus, Trash2, GripVertical } from "lucide-react";
+import { Pencil, Sun, Moon, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Layers, RotateCcw, Check, Plus, Trash2, GripVertical, Lightbulb, Archive } from "lucide-react";
 
 type TaskApiRow = {
   id: string;
@@ -47,6 +47,18 @@ type CalendarApiRow = {
   start: string;
   end: string;
   location?: string;
+};
+
+type WorkoutExerciseApiRow = {
+  exercise_name: string;
+  reps: number;
+  weight_kg: number;
+};
+
+type WorkoutApiRow = {
+  id: string;
+  occurred_date: string;
+  workout_exercises: WorkoutExerciseApiRow[];
 };
 
 export type ActivityApiRow = {
@@ -129,6 +141,13 @@ export type DashData = {
   SCHEDULE_FOLLOWED_MIN: number;
   SCHEDULE_ELAPSED_MIN: number;
   QUOTES: QuoteRow[];
+  WORKOUT_SUMMARY: {
+    sessions: number;
+    exercises: number;
+    sets: number;
+    volume: number;
+    label: string;
+  };
 };
 
 type CockpitCardItem = {
@@ -145,7 +164,16 @@ type CockpitPostcard = {
   items: CockpitCardItem[];
 };
 
-type SystemPostcardId = "next" | "problems";
+type Idea = {
+  id: string;
+  text: string;
+  category: string;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type SystemPostcardId = "problems";
 
 type SystemPostcardPositions = Record<SystemPostcardId, { x: number; y: number }>;
 
@@ -271,6 +299,7 @@ export function useDashData(
     includeCalendar?: boolean;
     includeProblems?: boolean;
     includeQuotes?: boolean;
+    includeWorkouts?: boolean;
   }
 ): DashData | null {
   const [data, setData] = useState<DashData | null>(null);
@@ -280,6 +309,7 @@ export function useDashData(
   const includeCalendar = options?.includeCalendar ?? true;
   const includeProblems = options?.includeProblems ?? true;
   const includeQuotes = options?.includeQuotes ?? true;
+  const includeWorkouts = options?.includeWorkouts ?? false;
 
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +349,10 @@ export function useDashData(
         ? fetch("/api/quotes").then((r) => r.json()).catch(() => ({ quotes: [] }))
         : Promise.resolve({ quotes: [] });
 
+      const workoutsResPromise = includeWorkouts
+        ? fetch("/api/workouts").then((r) => r.json()).catch(() => ({ workouts: [] }))
+        : Promise.resolve({ workouts: [] });
+
       const [
         dailyRes,
         tasksRes,
@@ -326,6 +360,7 @@ export function useDashData(
         problemsRes,
         learningsRes,
         quotesRes,
+        workoutsRes,
       ] = await Promise.all([
         dailyResPromise,
         tasksResPromise,
@@ -333,6 +368,7 @@ export function useDashData(
         problemsResPromise,
         learningsResPromise,
         quotesResPromise,
+        workoutsResPromise,
       ]);
 
       if (cancelled) return;
@@ -344,6 +380,8 @@ export function useDashData(
       const activities = (dailyRes.activities ?? []) as ActivityApiRow[];
       const calendar = (calendarRes.events ?? []) as CalendarApiRow[];
       const allTasks = (tasksRes.tasks ?? []) as TaskApiRow[];
+      const todayWorkouts = ((workoutsRes.workouts ?? []) as WorkoutApiRow[])
+        .filter((workout) => workout.occurred_date === today);
       const tasks = allTasks.filter((t) => {
         if (!t.done) {
           if (dateOverride) {
@@ -460,6 +498,9 @@ export function useDashData(
         cat: s.category,
       }));
 
+      const workoutSets = todayWorkouts.flatMap((workout) => workout.workout_exercises ?? []);
+      const workoutExerciseNames = new Set(workoutSets.map((set) => set.exercise_name));
+
       const feed = [
         ...food.map<DashFeed>((f) => ({
           t: f.time,
@@ -519,6 +560,15 @@ export function useDashData(
         SCHEDULE_FOLLOWED_MIN: elapsed,
         SCHEDULE_ELAPSED_MIN: Math.max(1, elapsed || Math.min(scheduled, now - 6 * 60)),
         QUOTES: quotesRes.quotes ?? [],
+        WORKOUT_SUMMARY: {
+          sessions: todayWorkouts.length,
+          exercises: workoutExerciseNames.size,
+          sets: workoutSets.length,
+          volume: workoutSets.reduce((sum, set) => sum + (set.reps * set.weight_kg), 0),
+          label: workoutExerciseNames.size > 0
+            ? Array.from(workoutExerciseNames).slice(0, 2).join(" + ")
+            : "Rest day",
+        },
       });
     }
 
@@ -530,7 +580,7 @@ export function useDashData(
     return () => {
       cancelled = true;
     };
-  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeCalendar, includeProblems, includeQuotes]);
+  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeCalendar, includeProblems, includeQuotes, includeWorkouts]);
 
   return data;
 }
@@ -658,15 +708,14 @@ export function Eyebrow({
 
 const NAV_ITEMS = [
   { id: "cockpit", label: "cockpit", href: "/" },
-  { id: "tasks", label: "tasks & learning", href: "/tasks" },
-  { id: "activities", label: "activities", href: "/activities" },
+  { id: "tasks", label: "tasks", href: "/tasks" },
   { id: "calendar", label: "calendar", href: "/calendar" },
   { id: "food", label: "food & spend", href: "/food" },
   { id: "workouts", label: "workouts", href: "/workouts" },
-  { id: "ideas", label: "ideas", href: "/ideas" },
+  { id: "activities", label: "activities", href: "/activities" },
 ];
 
-type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts" | "ideas";
+type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts";
 
 function Nav({ active }: { active: NavItemId }) {
   return (
@@ -2286,8 +2335,8 @@ function createDefaultCockpitCards(): CockpitPostcard[] {
     {
       id: "doing",
       title: "What I am doing",
-      x: 420,
-      y: 118,
+      x: 42,
+      y: 42,
       items: [
         { id: "doing-1", text: "Keep the current work visible", done: false },
       ],
@@ -2295,8 +2344,8 @@ function createDefaultCockpitCards(): CockpitPostcard[] {
     {
       id: "thinking",
       title: "Thinking space",
-      x: 760,
-      y: 248,
+      x: 370,
+      y: 176,
       items: [
         { id: "thinking-1", text: "Capture the next useful move", done: false },
       ],
@@ -2306,8 +2355,7 @@ function createDefaultCockpitCards(): CockpitPostcard[] {
 
 function createDefaultSystemPostcardPositions(): SystemPostcardPositions {
   return {
-    next: { x: 38, y: 34 },
-    problems: { x: 38, y: 324 },
+    problems: { x: 698, y: 42 },
   };
 }
 
@@ -2376,24 +2424,71 @@ function CockpitPostcardShell({
   );
 }
 
+function TodayTile({
+  href,
+  label,
+  value,
+  detail,
+  progress,
+}: {
+  href: string;
+  label: string;
+  value: string;
+  detail: string;
+  progress?: number;
+}) {
+  return (
+    <Link href={href} className="today-tile">
+      <div className="eyebrow-tag" style={{ marginBottom: 10 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {value}
+      </div>
+      <div className="mono" style={{ marginTop: 5, fontSize: 9.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {detail}
+      </div>
+      {progress !== undefined && (
+        <div style={{ height: 4, marginTop: 10, overflow: "hidden", background: "var(--card-2)", border: "1px solid #000000" }}>
+          <div style={{ width: `${Math.min(100, Math.max(0, progress))}%`, height: "100%", background: "#000000" }} />
+        </div>
+      )}
+    </Link>
+  );
+}
+
+function estimatedIdeaNoteHeight(text: string) {
+  const estimatedLines = Math.max(1, Math.ceil(text.length / 28));
+  const bodyHeight = Math.max(38, estimatedLines * 18 + 20);
+  return 30 + bodyHeight + 31;
+}
+
 export function CockpitPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [newProblem, setNewProblem] = useState("");
   const [newCardTitle, setNewCardTitle] = useState("");
+  const [newIdeaText, setNewIdeaText] = useState("");
   const [cards, setCards] = useState<CockpitPostcard[]>([]);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [ideaPositions, setIdeaPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [ideasVisible, setIdeasVisible] = useState(false);
+  const [problemsVisible, setProblemsVisible] = useState(false);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
+  const [editingIdeaText, setEditingIdeaText] = useState("");
   const [cardsLoaded, setCardsLoaded] = useState(false);
   const [systemPositions, setSystemPositions] = useState<SystemPostcardPositions>(createDefaultSystemPostcardPositions);
   const [systemPositionsLoaded, setSystemPositionsLoaded] = useState(false);
   const [dragState, setDragState] = useState<{
     id: string;
-    kind: "user" | "system";
+    kind: "user" | "system" | "idea";
     startX: number;
     startY: number;
     originX: number;
     originY: number;
+    itemWidth: number;
+    itemHeight: number;
   } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const data = useDashData(undefined, refreshTrigger, { includeLearnings: false });
+  const data = useDashData(undefined, refreshTrigger, { includeLearnings: false, includeQuotes: false, includeWorkouts: true });
 
   useEffect(() => {
     try {
@@ -2404,6 +2499,19 @@ export function CockpitPage() {
       setCards(createDefaultCockpitCards());
     } finally {
       setCardsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedPositions = window.localStorage.getItem("dash_cockpit_ideas_v1");
+      const savedVisibility = window.localStorage.getItem("dash_cockpit_ideas_visible_v1");
+      const savedProblemsVisibility = window.localStorage.getItem("dash_cockpit_problems_visible_v1");
+      setIdeaPositions(savedPositions ? JSON.parse(savedPositions) : {});
+      setIdeasVisible(savedVisibility === "true");
+      setProblemsVisible(savedProblemsVisibility === "true");
+    } catch {
+      setIdeaPositions({});
     }
   }, []);
 
@@ -2429,6 +2537,33 @@ export function CockpitPage() {
     window.localStorage.setItem("dash_cockpit_system_postcards_v1", JSON.stringify(systemPositions));
   }, [systemPositions, systemPositionsLoaded]);
 
+  useEffect(() => {
+    window.localStorage.setItem("dash_cockpit_ideas_v1", JSON.stringify(ideaPositions));
+  }, [ideaPositions]);
+
+  useEffect(() => {
+    window.localStorage.setItem("dash_cockpit_ideas_visible_v1", String(ideasVisible));
+  }, [ideasVisible]);
+
+  useEffect(() => {
+    window.localStorage.setItem("dash_cockpit_problems_visible_v1", String(problemsVisible));
+  }, [problemsVisible]);
+
+  const loadIdeas = useCallback(async () => {
+    setIdeasLoading(true);
+    try {
+      const response = await fetch("/api/ideas?all=true");
+      const payload = await response.json();
+      setIdeas(((payload.ideas ?? []) as Idea[]).filter((idea) => !idea.archived));
+    } finally {
+      setIdeasLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ideasVisible) void loadIdeas();
+  }, [ideasVisible, loadIdeas]);
+
   const solveProblem = useCallback(async (id: string) => {
     await fetch(`/api/problems/${id}`, {
       method: "PATCH",
@@ -2450,6 +2585,48 @@ export function CockpitPage() {
     setRefreshTrigger((prev) => prev + 1);
   }, [newProblem]);
 
+  const addIdea = useCallback(async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!newIdeaText.trim()) return;
+    const response = await fetch("/api/ideas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: newIdeaText.trim() }),
+    });
+    if (response.ok) {
+      setNewIdeaText("");
+      await loadIdeas();
+    }
+  }, [loadIdeas, newIdeaText]);
+
+  const archiveIdea = useCallback(async (id: string) => {
+    const response = await fetch(`/api/ideas/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    if (response.ok) setIdeas((current) => current.filter((idea) => idea.id !== id));
+  }, []);
+
+  const deleteIdea = useCallback(async (id: string) => {
+    const response = await fetch(`/api/ideas/${id}`, { method: "DELETE" });
+    if (response.ok) setIdeas((current) => current.filter((idea) => idea.id !== id));
+  }, []);
+
+  const saveIdea = useCallback(async (id: string) => {
+    if (!editingIdeaText.trim()) return;
+    const response = await fetch(`/api/ideas/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editingIdeaText.trim() }),
+    });
+    if (response.ok) {
+      setIdeas((current) => current.map((idea) => idea.id === id ? { ...idea, text: editingIdeaText.trim() } : idea));
+      setEditingIdeaId(null);
+      setEditingIdeaText("");
+    }
+  }, [editingIdeaText]);
+
   const createCard = useCallback((e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!newCardTitle.trim()) return;
@@ -2457,8 +2634,8 @@ export function CockpitPage() {
     const card: CockpitPostcard = {
       id: Math.random().toString(36).slice(2, 10),
       title: newCardTitle.trim(),
-      x: 410 + offset * 38,
-      y: 410 + offset * 28,
+      x: 42 + offset * 38,
+      y: 360 + offset * 28,
       items: [],
     };
     setCards((current) => [...current, card]);
@@ -2496,12 +2673,14 @@ export function CockpitPage() {
 
   const startDrag = useCallback((
     item: { id: string; x: number; y: number },
-    kind: "user" | "system",
+    kind: "user" | "system" | "idea",
     event: ReactPointerEvent<HTMLDivElement>
   ) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, input, textarea, a")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    const cardElement = event.currentTarget.closest<HTMLElement>(".idea-note, .grid-card");
+    const cardRect = cardElement?.getBoundingClientRect();
     setDragState({
       id: item.id,
       kind,
@@ -2509,19 +2688,29 @@ export function CockpitPage() {
       startY: event.clientY,
       originX: item.x,
       originY: item.y,
+      itemWidth: (cardRect?.width ?? (kind === "idea" ? 220 : 292)) + 12,
+      itemHeight: (cardRect?.height ?? (kind === "idea" ? 112 : 220)) + 36,
     });
   }, []);
 
   const moveDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (!dragState || !boardRef.current) return;
     const rect = boardRef.current.getBoundingClientRect();
-    const nextX = Math.max(12, Math.min(rect.width - 312, dragState.originX + event.clientX - dragState.startX));
-    const nextY = Math.max(12, Math.min(rect.height - 256, dragState.originY + event.clientY - dragState.startY));
+    const nextX = Math.max(12, Math.min(rect.width - dragState.itemWidth, dragState.originX + event.clientX - dragState.startX));
+    const nextY = Math.max(12, Math.min(rect.height - dragState.itemHeight, dragState.originY + event.clientY - dragState.startY));
     if (dragState.kind === "system") {
       const systemId = dragState.id as SystemPostcardId;
       setSystemPositions((current) => ({
         ...current,
         [systemId]: { x: nextX, y: nextY },
+      }));
+      return;
+    }
+
+    if (dragState.kind === "idea") {
+      setIdeaPositions((current) => ({
+        ...current,
+        [dragState.id]: { x: nextX, y: nextY },
       }));
       return;
     }
@@ -2540,12 +2729,88 @@ export function CockpitPage() {
   const upcomingEvent = [...data.BLOCKS]
     .filter((block) => block.kind === "cal" && toMinutes(block.end) >= data.NOW_MIN)
     .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))[0];
+  const spendByCategory = data.SPEND.reduce<Record<string, number>>((totals, item) => {
+    totals[item.cat] = (totals[item.cat] ?? 0) + item.amount;
+    return totals;
+  }, {});
+  const topSpendCategory = Object.entries(spendByCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "No spending logged";
 
   return (
     <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <PageHeader active="cockpit" data={data} />
 
-      <main style={{ flex: 1, minHeight: 0, padding: "18px 28px 28px", boxSizing: "border-box", display: "flex", flexDirection: "column" }}>
+      <main className="cockpit-layout">
+        <section className="today-strip" aria-label="Today at a glance">
+          <TodayTile
+            href="/tasks"
+            label="Next task"
+            value={activeTask?.title ?? "All clear"}
+            detail={activeTask ? `${activeTask.weight} · due ${activeTask.due || "today"}` : "Nothing waiting"}
+          />
+          <TodayTile
+            href="/calendar"
+            label="Next event"
+            value={upcomingEvent?.label ?? "Free"}
+            detail={upcomingEvent ? `${upcomingEvent.start}–${upcomingEvent.end}` : "No upcoming event"}
+          />
+          <TodayTile
+            href="/food"
+            label="Food"
+            value={data.MEALS.length ? `${data.VITALS.kcal.today} kcal · ${data.VITALS.protein.today}g` : "Not logged"}
+            detail={`${data.VITALS.kcal.target} kcal · ${data.VITALS.protein.target}g target`}
+            progress={(data.VITALS.kcal.today / data.VITALS.kcal.target) * 100}
+          />
+          <TodayTile
+            href="/food"
+            label="Spending"
+            value={`₹${data.VITALS.spend.today.toFixed(0)}`}
+            detail={data.SPEND.length ? `${topSpendCategory} · ₹${data.VITALS.spend.target} target` : "₹0 today"}
+            progress={(data.VITALS.spend.today / data.VITALS.spend.target) * 100}
+          />
+          <TodayTile
+            href="/workouts"
+            label="Workout"
+            value={data.WORKOUT_SUMMARY.label}
+            detail={data.WORKOUT_SUMMARY.sessions ? `${data.WORKOUT_SUMMARY.exercises} exercises · ${data.WORKOUT_SUMMARY.sets} sets` : "Recovery is training too"}
+          />
+        </section>
+
+        <div className="cockpit-workspace">
+        <div className="cockpit-toolbar">
+          <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 280, flex: "1 1 360px" }}>
+            <input
+              className="clean-input"
+              value={newCardTitle}
+              onChange={(e) => setNewCardTitle(e.target.value)}
+              placeholder="New postcard..."
+              style={{ flex: 1, minWidth: 0, height: 38, padding: "0 12px", fontSize: 12 }}
+            />
+            <button className="clean-button primary" type="submit" disabled={!newCardTitle.trim()} title="Add postcard">
+              <Plus size={14} /> Add
+            </button>
+          </form>
+
+          {ideasVisible && (
+            <form onSubmit={addIdea} style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 300px" }}>
+              <input
+                className="clean-input"
+                value={newIdeaText}
+                onChange={(e) => setNewIdeaText(e.target.value)}
+                placeholder="Add an idea..."
+                style={{ flex: 1, minWidth: 0, height: 38, padding: "0 12px", fontSize: 12 }}
+              />
+              <button className="clean-button" type="submit" disabled={!newIdeaText.trim()}>Save</button>
+            </form>
+          )}
+
+          <button type="button" className={`clean-button ${ideasVisible ? "active" : ""}`} onClick={() => setIdeasVisible((visible) => !visible)}>
+            <Lightbulb size={14} /> Ideas {ideasLoading ? "…" : ideasVisible ? ideas.length : ""}
+          </button>
+          <button type="button" className={`clean-button ${problemsVisible ? "active" : ""}`} onClick={() => setProblemsVisible((visible) => !visible)}>
+            Problems {activeProblems.length}
+          </button>
+        </div>
+
         <div
           ref={boardRef}
           onPointerMove={moveDrag}
@@ -2556,105 +2821,14 @@ export function CockpitPage() {
             flex: 1,
             minHeight: 0,
             overflow: "auto",
-            border: "1px solid rgba(12, 12, 14, 0.16)",
+            border: "2px solid #000000",
             backgroundImage: "radial-gradient(rgba(12, 12, 14, 0.12) 1px, transparent 1px)",
             backgroundSize: "28px 28px",
             backgroundColor: "rgba(252, 251, 247, 0.32)",
           }}
         >
-          <div style={{ position: "relative", minWidth: 1120, minHeight: 840 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "170px minmax(280px, 1fr) 380px",
-                alignItems: "center",
-                gap: 24,
-                padding: "24px 32px 20px",
-              }}
-            >
-              <div className="zine-eyebrow blue" style={{ width: "fit-content" }}>
-                <span>↳ cockpit board</span>
-                <span>01</span>
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.05, textAlign: "center", maxWidth: 460, justifySelf: "center" }}>
-                {data.VISION_LINE}
-              </div>
-              <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", justifySelf: "end" }}>
-                <input
-                  value={newCardTitle}
-                  onChange={(e) => setNewCardTitle(e.target.value)}
-                  placeholder="New postcard"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    background: "#ffffff",
-                    border: "2px solid #000000",
-                    padding: "12px 14px",
-                    fontSize: 14,
-                    fontFamily: "inherit",
-                    outline: "none",
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={!newCardTitle.trim()}
-                  title="Add postcard"
-                  style={{
-                    width: 44,
-                    height: 44,
-                    background: "#0c0c0e",
-                    color: "#faf9f6",
-                    border: "none",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                  }}
-                >
-                  <Plus size={18} />
-                </button>
-              </form>
-            </div>
-
-            <div style={{ position: "relative", minHeight: 720 }}>
-            <CockpitPostcardShell
-              title="Next up"
-              eyebrow="task / event"
-              x={systemPositions.next.x}
-              y={systemPositions.next.y}
-              count="move"
-              onPointerDown={(event) => startDrag({ id: "next", ...systemPositions.next }, "system", event)}
-            >
-              <div style={{ padding: "16px 16px 14px", display: "flex", flexDirection: "column", gap: 16, background: "#fffdf8", flex: 1 }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <ArrowDown size={16} style={{ marginTop: 2, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", marginBottom: 3 }}>next task</div>
-                    <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1.18 }}>
-                      {activeTask ? activeTask.title : "No active focus task"}
-                    </div>
-                    {activeTask && (
-                      <div className="mono" style={{ fontSize: 9, color: "#66666a", marginTop: 4 }}>
-                        weight: {weightForTask(activeTask.title)} · due {activeTask.due || "today"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ borderTop: "1px solid rgba(12, 12, 14, 0.12)", paddingTop: 14 }}>
-                  <div className="mono" style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase", marginBottom: 3 }}>next event</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.22 }}>
-                    {upcomingEvent ? upcomingEvent.label : "No upcoming event"}
-                  </div>
-                  {upcomingEvent && (
-                    <div className="mono" style={{ fontSize: 9, color: "#66666a", marginTop: 4 }}>
-                      {upcomingEvent.start} - {upcomingEvent.end}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CockpitPostcardShell>
-
-            <CockpitPostcardShell
+          <div style={{ position: "relative", minWidth: 1120, minHeight: 760 }}>
+            {problemsVisible && <CockpitPostcardShell
               title="Problem space"
               eyebrow="open loops"
               x={systemPositions.problems.x}
@@ -2662,7 +2836,7 @@ export function CockpitPage() {
               count={`${activeProblems.length} items`}
               onPointerDown={(event) => startDrag({ id: "problems", ...systemPositions.problems }, "system", event)}
             >
-              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fffdf8" }}>
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#ffffff" }}>
                 <div style={{
                   display: "flex",
                   flexDirection: "column",
@@ -2679,7 +2853,7 @@ export function CockpitPage() {
                         <button
                           onClick={() => solveProblem(problem.id)}
                           title="Mark solved"
-                          style={{ width: 16, height: 16, border: "2px solid #000000", background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
+                          style={{ width: 16, height: 16, border: "1px solid var(--line-strong)", borderRadius: 4, background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
                         />
                         <span>{problem.text}</span>
                       </div>
@@ -2695,7 +2869,7 @@ export function CockpitPage() {
                   />
                 </form>
               </div>
-            </CockpitPostcardShell>
+            </CockpitPostcardShell>}
 
             {cards.map((card) => (
               <CockpitPostcardShell
@@ -2707,7 +2881,7 @@ export function CockpitPage() {
                 count={`${card.items.filter((item) => !item.done).length} open`}
                 onPointerDown={(event) => startDrag(card, "user", event)}
               >
-                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#fffdf8" }}>
+                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#ffffff" }}>
                   <div style={{
                     display: "flex",
                     flexDirection: "column",
@@ -2728,8 +2902,9 @@ export function CockpitPage() {
                             style={{
                               width: 16,
                               height: 16,
-                              border: "2px solid #000000",
-                              background: item.done ? "#7dd3fc" : "transparent",
+                              border: "1px solid var(--line-strong)",
+                              borderRadius: 4,
+                              background: item.done ? "#ffedd5" : "transparent",
                               cursor: "pointer",
                               display: "grid",
                               placeItems: "center",
@@ -2777,8 +2952,68 @@ export function CockpitPage() {
                 </div>
               </CockpitPostcardShell>
             ))}
-            </div>
+
+            {ideasVisible && ideas.map((idea, index) => {
+              const column = index % 4;
+              const precedingColumnIdeas = ideas.filter((_, precedingIndex) => (
+                precedingIndex < index && precedingIndex % 4 === column
+              ));
+              const position = ideaPositions[idea.id] ?? {
+                x: 42 + column * 240,
+                y: 420 + precedingColumnIdeas.reduce(
+                  (offset, precedingIdea) => offset + estimatedIdeaNoteHeight(precedingIdea.text) + 14,
+                  0
+                ),
+              };
+              return (
+                <div
+                  key={idea.id}
+                  className="idea-note"
+                  style={{ left: position.x, top: position.y }}
+                >
+                  <div
+                    className="idea-note-header"
+                    onPointerDown={(event) => startDrag({ id: idea.id, ...position }, "idea", event)}
+                  >
+                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 900, textTransform: "uppercase" }}>↳ {idea.category || "idea"}</span>
+                    <GripVertical size={12} />
+                  </div>
+                  <div className="idea-note-body">
+                    {editingIdeaId === idea.id ? (
+                      <textarea
+                        autoFocus
+                        className="clean-input"
+                        value={editingIdeaText}
+                        onChange={(event) => setEditingIdeaText(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            void saveIdea(idea.id);
+                          }
+                          if (event.key === "Escape") setEditingIdeaId(null);
+                        }}
+                        style={{ width: "100%", minHeight: 60, padding: 7, resize: "none", fontSize: 12, lineHeight: 1.4 }}
+                      />
+                    ) : (
+                      <p className="idea-note-text" title={idea.text}>{idea.text}</p>
+                    )}
+                  </div>
+                  <div className="idea-note-footer">
+                    <button type="button" title="Edit idea" onClick={() => { setEditingIdeaId(idea.id); setEditingIdeaText(idea.text); }} style={{ border: 0, background: "transparent", padding: 4, cursor: "pointer", color: "var(--muted)" }}>
+                      <Pencil size={12} />
+                    </button>
+                    <button type="button" title="Archive idea" onClick={() => void archiveIdea(idea.id)} style={{ border: 0, background: "transparent", padding: 4, cursor: "pointer", color: "var(--muted)" }}>
+                      <Archive size={12} />
+                    </button>
+                    <button type="button" title="Delete idea" onClick={() => void deleteIdea(idea.id)} style={{ border: 0, background: "transparent", padding: 4, cursor: "pointer", color: "var(--rose)" }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        </div>
         </div>
       </main>
     </div>
