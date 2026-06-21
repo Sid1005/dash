@@ -35,20 +35,28 @@ function getOpenCodeClient(): OpenAI {
 const PARSER_SYSTEM_PROMPT = `You are a personal dashboard assistant. Your task is to classify and parse the user's natural language input by calling the appropriate tool.
 Current time: {now}
 
-General guidelines:
+Classification rules (read the entire message before choosing a tool):
+- Choose based on the user's intent and the structure of the whole message, not individual topic words.
 - For diet / food logs:
+  - Use food tools when the message clearly reports food that was eaten or consumed. A meal label by itself does not establish a food log.
   - Be conservative when guessing calories and protein_g. Single casual meal protein rarely exceeds 35-40g. Lean meat portions: 22-28g protein. Bowl of oatmeal: 8-14g protein.
   - If the user sends a list of foods eaten across the day or multiple meals/items, use log_multiple_food. Estimate each item separately.
   - Use log_food only for a single food item or single combined meal.
 - For workout logs:
-  - Use log_workout for gym/workout messages, exercise lists, or lines containing sets/reps/weights.
+  - Use log_workout only when the message records a workout that happened and contains one or more exercises with concrete set details such as reps and weights.
+  - Examples: "Bench press 3 sets of 10 at 50kg" or "Squats 5x5 at 80kg".
 - For unsupported notes / journals:
   - Do not save generic notes or journal entries. Use chat_response to say the message was not saved and ask for a supported log type if needed.
-- For calendar time blocks:
-  - If a time range is vague, use current time context to guess.
+- For calendar events:
+  - Use create_calendar_event for a scheduled commitment, appointment, reservation, meeting, or other event.
+  - An activity expressed with an explicit start-to-end time span or duration is a scheduled event unless the full message clearly reports a completed record in another supported category.
+  - If an event has a start time but no end time or duration, omit the end; it will be scheduled for 30 minutes.
+  - Use update_calendar_event only when the user asks to move, rename, reschedule, or otherwise edit an existing event.
+  - Use delete_calendar_event only when the user asks to cancel, remove, or delete an existing event.
 - For tasks / to-do items:
   - If the user provides a list of multiple tasks/to-do items (e.g., multiple lines, a bulleted/numbered list, or multiple distinct actions to be done in the future), use add_tasks.
   - If the user provides a single task, use add_task.
+  - Examples: "Pick up Mom at 5pm" or "Gym at 8pm".
 - For combined food and spending (e.g., "spent 200 on chicken rice"):
   - Use log_food_and_spending.
 `;
@@ -58,7 +66,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "log_workout",
-      description: "Log workout exercises, sets, reps, and weights.",
+      description: "Record a completed structured workout containing at least one exercise with concrete set details. Examples include 'Bench press 3 sets of 10 at 50kg' and 'Squats 5x5 at 80kg'.",
       parameters: {
         type: "object",
         properties: {
@@ -66,12 +74,14 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           muscle_group: { type: "string", description: "Target muscle group if specified." },
           exercises: {
             type: "array",
+            minItems: 1,
             items: {
               type: "object",
               properties: {
                 name: { type: "string", description: "Name of the exercise (e.g. Bench Press)." },
                 sets: {
                   type: "array",
+                  minItems: 1,
                   items: {
                     type: "object",
                     properties: {
@@ -226,45 +236,56 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "log_time_block",
-      description: "Log a single calendar time block.",
+      name: "create_calendar_event",
+      description: "Create a new Google Calendar event for a scheduled commitment, appointment, reservation, or meeting. When no end time is supplied, the event defaults to 30 minutes.",
       parameters: {
         type: "object",
         properties: {
+          title: { type: "string", description: "Concise event title, excluding the location and times." },
+          date: { type: "string", description: "Event date in YYYY-MM-DD format, resolved from the current-time context." },
           start: { type: "string", description: "Start time in 24-hour HH:MM format." },
-          end: { type: "string", description: "End time in 24-hour HH:MM format." },
-          activity: { type: "string", description: "Description of the activity." },
-          category: { type: "string", enum: ["Deep Work", "Admin", "Meetings", "Personal", "Health", "Learning", "Other"], description: "Category of activity (Deep Work, Admin, Meetings, Personal, Health, Learning, Other)." },
-          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
+          end: { type: "string", description: "End time in 24-hour HH:MM format when stated. Omit to use the 30-minute default." },
+          end_date: { type: "string", description: "End date in YYYY-MM-DD format only when the event ends on a different day." },
+          location: { type: "string", description: "Event location when stated." },
+          description: { type: "string", description: "Optional event notes when stated." }
         },
-        required: ["start", "end", "activity", "category"]
+        required: ["title", "date", "start"]
       }
     }
   },
   {
     type: "function",
     function: {
-      name: "log_time_blocks",
-      description: "Log multiple calendar time blocks from a single message.",
+      name: "update_calendar_event",
+      description: "Edit an existing Google Calendar event. Identify the existing event by its current title and date, and include only fields the user wants changed.",
       parameters: {
         type: "object",
         properties: {
-          blocks: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                start: { type: "string", description: "Start time in 24-hour HH:MM format." },
-                end: { type: "string", description: "End time in 24-hour HH:MM format." },
-                activity: { type: "string" },
-                category: { type: "string", enum: ["Deep Work", "Admin", "Meetings", "Personal", "Health", "Learning", "Other"], description: "Category of activity." }
-              },
-              required: ["start", "end", "activity", "category"]
-            }
-          },
-          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
+          event_title: { type: "string", description: "Current title, or distinctive words from the current title, used to find the event." },
+          event_date: { type: "string", description: "Current event date in YYYY-MM-DD format, resolved from context." },
+          new_title: { type: "string", description: "Replacement title, only if requested." },
+          new_date: { type: "string", description: "Replacement date in YYYY-MM-DD format, only if requested." },
+          new_start: { type: "string", description: "Replacement start time in 24-hour HH:MM format, only if requested." },
+          new_end: { type: "string", description: "Replacement end time in 24-hour HH:MM format, only if requested." },
+          new_location: { type: "string", description: "Replacement location, only if requested." },
+          new_description: { type: "string", description: "Replacement description, only if requested." }
         },
-        required: ["blocks"]
+        required: ["event_title", "event_date"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_calendar_event",
+      description: "Delete or cancel an existing Google Calendar event. Identify it by its current title and date. Never use this to mark a task complete.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_title: { type: "string", description: "Current title, or distinctive words from the current title, used to find the event." },
+          event_date: { type: "string", description: "Current event date in YYYY-MM-DD format, resolved from context." }
+        },
+        required: ["event_title", "event_date"]
       }
     }
   },
@@ -272,7 +293,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "add_task",
-      description: "Add a task / to-do item with due date or time.",
+      description: "Add something the user intends to do, optionally with a due or reminder time. Examples include 'Pick up Mom at 5pm' and 'Gym at 8pm'.",
       parameters: {
         type: "object",
         properties: {
@@ -377,8 +398,9 @@ export interface ParsedAction {
     | "spending"
     | "multiple_spending"
     | "food_and_spending"
-    | "time_block"
-    | "time_blocks"
+    | "calendar_event_create"
+    | "calendar_event_update"
+    | "calendar_event_delete"
     | "task"
     | "tasks"
     | "learning"
@@ -509,10 +531,12 @@ If the user's input is a completely new command, ignore the pending action and p
         return { type: "multiple_spending", data: args };
       case "log_food_and_spending":
         return { type: "food_and_spending", data: args };
-      case "log_time_block":
-        return { type: "time_block", data: args };
-      case "log_time_blocks":
-        return { type: "time_blocks", data: args };
+      case "create_calendar_event":
+        return { type: "calendar_event_create", data: args };
+      case "update_calendar_event":
+        return { type: "calendar_event_update", data: args };
+      case "delete_calendar_event":
+        return { type: "calendar_event_delete", data: args };
       case "add_task":
         return { type: "task", data: args };
       case "add_tasks":

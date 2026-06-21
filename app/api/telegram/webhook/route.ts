@@ -3,6 +3,7 @@ import {
   applyParsedAction,
   formatActionPreview,
   parseNaturalLanguage,
+  prepareParsedAction,
 } from "@/lib/actions";
 import {
   answerCallbackQuery,
@@ -136,7 +137,7 @@ async function processMessage(
     }
 
     const parseInputString = pendingAction ? text : history.join("\n");
-    const action = await parseNaturalLanguage(
+    let action = await parseNaturalLanguage(
       parseInputString,
       `${today} ${now} (${weekday})`,
       pendingAction,
@@ -160,6 +161,7 @@ async function processMessage(
     }
 
     const targetDate = (action.data?.date as string) || today;
+    action = await prepareParsedAction(action, targetDate, await getDefaultOwnerDb());
     await setPending(chatId, action, targetDate);
     await sendTelegramMessageWithButtons(chatId, formatActionPreview(action));
   } catch (e) {

@@ -105,6 +105,48 @@ export async function createCalendarEvent(params: {
   }
 }
 
+export async function updateCalendarEvent(params: {
+  eventId: string;
+  title?: string;
+  start?: string;
+  end?: string;
+  description?: string;
+  location?: string;
+}): Promise<boolean> {
+  const apiKey = process.env.COMPOSIO_API_KEY;
+  if (!apiKey) return false;
+
+  try {
+    const res = await fetch(
+      "https://backend.composio.dev/api/v3/tools/execute/GOOGLECALENDAR_PATCH_EVENT",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          user_id: process.env.COMPOSIO_ENTITY_ID ?? "default",
+          arguments: {
+            calendar_id: "primary",
+            event_id: params.eventId,
+            ...(params.title !== undefined ? { summary: params.title } : {}),
+            ...(params.start !== undefined ? { start_time: params.start } : {}),
+            ...(params.end !== undefined ? { end_time: params.end } : {}),
+            ...(params.description !== undefined ? { description: params.description } : {}),
+            ...(params.location !== undefined ? { location: params.location } : {}),
+            timezone: "Asia/Kolkata",
+          },
+        }),
+      }
+    );
+
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
   const apiKey = process.env.COMPOSIO_API_KEY;
   if (!apiKey) return false;
@@ -133,4 +175,3 @@ export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
     return false;
   }
 }
-
