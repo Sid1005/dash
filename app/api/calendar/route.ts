@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createCalendarEvent, deleteCalendarEvent } from "@/lib/composio";
+import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from "@/lib/composio";
 import {
   deleteCalendarEventByExternalId,
   listCalendarEventsForDate,
@@ -43,6 +43,40 @@ export async function POST(req: NextRequest) {
       await syncGoogleCalendarEventsForDate(syncDate, scope);
     }
     return NextResponse.json({ ok });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const scope = await getUserScopedDb();
+    const body = await req.json();
+    const { id, title, start, end, description, location } = body;
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+    if (start && end && new Date(end) <= new Date(start)) {
+      return NextResponse.json({ error: "end must be after start" }, { status: 400 });
+    }
+
+    const ok = await updateCalendarEvent({
+      eventId: id,
+      title,
+      start,
+      end,
+      description,
+      location,
+    });
+    if (!ok) {
+      return NextResponse.json({ error: "Calendar provider update failed" }, { status: 502 });
+    }
+
+    const dates = new Set<string>();
+    if (start) dates.add(String(start).slice(0, 10));
+    if (end) dates.add(String(end).slice(0, 10));
+    await Promise.all(Array.from(dates, (date) => syncGoogleCalendarEventsForDate(date, scope)));
+    return NextResponse.json({ ok: true });
   } catch (error: unknown) {
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
   }

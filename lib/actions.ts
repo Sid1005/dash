@@ -1,14 +1,24 @@
-import { type FoodEntry, type SpendEntry, type TimeBlock } from "./types";
+import { type FoodEntry, type SpendEntry } from "./types";
 import { insertSpending } from "./spending-supabase";
 import { insertLearning } from "./learnings-supabase";
 import { insertProblem } from "./problems-supabase";
 import { insertIdea, listUniqueCategories } from "./ideas-supabase";
 import { classifyIdea } from "./classify-idea";
 import { insertFoodEntry } from "./food-supabase";
-import { insertTimeBlock } from "./time-blocks-supabase";
 import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
 import { currentIstDate } from "./time";
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+  updateCalendarEvent,
+  type CalendarEvent,
+} from "./composio";
+import {
+  deleteCalendarEventByExternalId,
+  listCalendarEventsForDate,
+} from "./calendar-events-supabase";
+import { syncGoogleCalendarEventsForDate } from "./calendar-sync";
 
 const VALID_SPEND_CATEGORIES = new Set([
   "Food", "Transport", "Health", "Entertainment", "Shopping", "Other",
@@ -20,6 +30,95 @@ type TaskInput = {
   due_time?: string;
   due_in_minutes?: number;
 };
+
+const IST_TIME_ZONE = "Asia/Kolkata";
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function normalizeEventTitle(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function eventLocalPart(value: string, part: "date" | "time"): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`Invalid calendar event time: ${value}`);
+  const options: Intl.DateTimeFormatOptions = part === "date"
+    ? { timeZone: IST_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }
+    : { timeZone: IST_TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+  return new Intl.DateTimeFormat("en-CA", options).format(date);
+}
+
+function localDateTime(date: string, time: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`Invalid event date: ${date}`);
+  if (!TIME_RE.test(time)) throw new Error(`Invalid event time: ${time}`);
+  return `${date}T${time}:00+05:30`;
+}
+
+function defaultEventEnd(date: string, start: string): { end: string; endDate: string } {
+  const value = new Date(localDateTime(date, start));
+  value.setMinutes(value.getMinutes() + 30);
+  const iso = value.toISOString();
+  return {
+    end: eventLocalPart(iso, "time"),
+    endDate: eventLocalPart(iso, "date"),
+  };
+}
+
+function findMatchingEvent(events: CalendarEvent[], query: string): CalendarEvent[] {
+  const normalizedQuery = normalizeEventTitle(query);
+  if (!normalizedQuery) return [];
+  const exact = events.filter((event) => normalizeEventTitle(event.title) === normalizedQuery);
+  if (exact.length > 0) return exact;
+  return events.filter((event) => {
+    const title = normalizeEventTitle(event.title);
+    return title.includes(normalizedQuery) || normalizedQuery.includes(title);
+  });
+}
+
+export async function prepareParsedAction(
+  action: ParsedAction,
+  date: string,
+  scope: DbScope
+): Promise<ParsedAction> {
+  if (action.type === "calendar_event_create" && !action.data.end) {
+    const date = String(action.data.date);
+    const { end, endDate } = defaultEventEnd(date, String(action.data.start));
+    return {
+      ...action,
+      data: {
+        ...action.data,
+        end,
+        ...(endDate !== date ? { end_date: endDate } : {}),
+      },
+    };
+  }
+  if (action.type !== "calendar_event_update" && action.type !== "calendar_event_delete") return action;
+  if (typeof action.data.event_id === "string" && action.data.event_id) return action;
+
+  const eventDate = String(action.data.event_date || date);
+  const eventTitle = String(action.data.event_title || "");
+  const matches = findMatchingEvent(await listCalendarEventsForDate(eventDate, scope), eventTitle);
+  if (matches.length === 0) {
+    throw new Error(`I could not find a calendar event matching "${eventTitle}" on ${eventDate}.`);
+  }
+  if (matches.length > 1) {
+    const choices = matches.slice(0, 4).map((event) => `${event.title} (${eventLocalPart(event.start, "time")})`).join(", ");
+    throw new Error(`More than one event matched "${eventTitle}" on ${eventDate}: ${choices}. Please be more specific.`);
+  }
+
+  const event = matches[0];
+  return {
+    ...action,
+    data: {
+      ...action.data,
+      event_id: event.id,
+      current_title: event.title,
+      current_start: event.start,
+      current_end: event.end,
+      current_location: event.location,
+      current_description: event.description,
+    },
+  };
+}
 
 function normalizeSpendCategory(raw: string): string {
   if (!raw) return "Other";
@@ -170,16 +269,69 @@ export async function applyParsedAction(
     return `Logged ${f.name}: ${f.calories} cal, ${f.protein_g}g protein${est} · ₹${s.amount}`;
   }
 
-  if (type === "time_block") {
-    const block = data as unknown as TimeBlock;
-    const saved = await insertTimeBlock(targetDate, block, dbScope);
-    return `Logged ${saved.start}–${saved.end}: ${saved.activity}`;
+  if (type === "calendar_event_create") {
+    const eventDate = String(data.date || targetDate);
+    const start = localDateTime(eventDate, String(data.start));
+    const defaultEnd = data.end ? null : defaultEventEnd(eventDate, String(data.start));
+    const endTime = String(data.end || defaultEnd?.end);
+    const endDate = String(data.end_date || defaultEnd?.endDate || eventDate);
+    const end = localDateTime(endDate, endTime);
+    if (new Date(end) <= new Date(start)) throw new Error("Calendar event end must be after its start.");
+    const ok = await createCalendarEvent({
+      title: String(data.title),
+      start,
+      end,
+      location: typeof data.location === "string" ? data.location : undefined,
+      description: typeof data.description === "string" ? data.description : undefined,
+    });
+    if (!ok) throw new Error("Google Calendar event creation failed.");
+    await syncGoogleCalendarEventsForDate(eventDate, dbScope);
+    return `Event created: "${data.title}" on ${eventDate}, ${data.start}–${endTime}`;
   }
 
-  if (type === "time_blocks") {
-    const blocks = (data.blocks ?? []) as Array<{ start: string; end: string; activity: string; category?: string }>;
-    const saved = await Promise.all(blocks.map((b) => insertTimeBlock(targetDate, b, dbScope)));
-    return saved.map((s) => `${s.start}–${s.end}: ${s.activity}`).join(" · ");
+  if (type === "calendar_event_update") {
+    const event = (await prepareParsedAction(action, targetDate, dbScope)).data;
+    const currentStart = String(event.current_start);
+    const currentEnd = String(event.current_end);
+    const currentDate = eventLocalPart(currentStart, "date");
+    const nextDate = String(event.new_date || currentDate);
+    const currentDuration = new Date(currentEnd).getTime() - new Date(currentStart).getTime();
+    let start: string | undefined;
+    let end: string | undefined;
+
+    if (event.new_start || event.new_date) {
+      start = localDateTime(nextDate, String(event.new_start || eventLocalPart(currentStart, "time")));
+      end = event.new_end
+        ? localDateTime(nextDate, String(event.new_end))
+        : new Date(new Date(start).getTime() + currentDuration).toISOString();
+    } else if (event.new_end) {
+      end = localDateTime(nextDate, String(event.new_end));
+    }
+    if (start && end && new Date(end) <= new Date(start)) {
+      throw new Error("Updated calendar event end must be after its start.");
+    }
+
+    const ok = await updateCalendarEvent({
+      eventId: String(event.event_id),
+      title: typeof event.new_title === "string" ? event.new_title : undefined,
+      start,
+      end,
+      location: typeof event.new_location === "string" ? event.new_location : undefined,
+      description: typeof event.new_description === "string" ? event.new_description : undefined,
+    });
+    if (!ok) throw new Error("Google Calendar event update failed.");
+    await Promise.all(
+      Array.from(new Set([currentDate, nextDate]), (syncDate) => syncGoogleCalendarEventsForDate(syncDate, dbScope))
+    );
+    return `Event updated: "${event.new_title || event.current_title}"`;
+  }
+
+  if (type === "calendar_event_delete") {
+    const event = (await prepareParsedAction(action, targetDate, dbScope)).data;
+    const ok = await deleteCalendarEvent(String(event.event_id));
+    if (!ok) throw new Error("Google Calendar event deletion failed.");
+    await deleteCalendarEventByExternalId(String(event.event_id), dbScope);
+    return `Event deleted: "${event.current_title}"`;
   }
 
   if (type === "task") {
@@ -263,8 +415,9 @@ export async function handleNaturalLanguage(
   scope?: DbScope
 ): Promise<{ action: ParsedAction; message: string }> {
   const combinedNow = `${date} ${now}`;
-  const action = await parseInput(input, combinedNow);
-  const message = await applyParsedAction(action, date, scope);
+  const dbScope = scope ?? await getUserScopedDb();
+  const action = await prepareParsedAction(await parseInput(input, combinedNow), date, dbScope);
+  const message = await applyParsedAction(action, date, dbScope);
   return { action, message };
 }
 
@@ -320,17 +473,25 @@ export function formatActionPreview(action: ParsedAction): string {
     return `I found ${expenses.length} expenses${dateLabel}:\n${lines}\nSave them? Reply *yes* or *no*.`;
   }
 
-  if (type === "time_block") {
-    const block = data as unknown as TimeBlock;
-    const dateLabel = formatDateLabel(data.date as string);
-    return `I parsed a time block${dateLabel}: *${block.start}-${block.end}* for *${block.activity}*.\nNote it down? Reply *yes* or *no*.`;
+  if (type === "calendar_event_create") {
+    const location = data.location ? ` at *${data.location}*` : "";
+    return `Create event *${data.title}*${location} on *${data.date}*, *${data.start}–${data.end}*? Reply *yes* or *no*.`;
   }
 
-  if (type === "time_blocks") {
-    const blocks = (data.blocks ?? []) as Array<{ start: string; end: string; activity: string }>;
-    const lines = blocks.map((b) => `*${b.start}–${b.end}* ${b.activity}`).join("\n");
-    const dateLabel = formatDateLabel(data.date as string);
-    return `I found ${blocks.length} time blocks${dateLabel}:\n${lines}\nSave them? Reply *yes* or *no*.`;
+  if (type === "calendar_event_update") {
+    const changes = [
+      data.new_title && `title to *${data.new_title}*`,
+      data.new_date && `date to *${data.new_date}*`,
+      data.new_start && `start to *${data.new_start}*`,
+      data.new_end && `end to *${data.new_end}*`,
+      data.new_location && `location to *${data.new_location}*`,
+      data.new_description && "description",
+    ].filter(Boolean).join(", ");
+    return `Update event *${data.current_title || data.event_title}* on *${data.event_date}* — ${changes || "requested details"}? Reply *yes* or *no*.`;
+  }
+
+  if (type === "calendar_event_delete") {
+    return `Delete event *${data.current_title || data.event_title}* on *${data.event_date}*? Reply *yes* or *no*.`;
   }
 
   if (type === "task") {
