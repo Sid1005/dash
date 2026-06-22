@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import type { PostgrestError } from "@supabase/supabase-js";
 
 interface ExerciseSet {
   id: string;
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
         )
       `)
       .eq("owner_user_id", ownerUserId)
-      .in("id", workoutIds) as { data: WorkoutWithExercises[] | null; error: any };
+      .in("id", workoutIds) as { data: WorkoutWithExercises[] | null; error: PostgrestError | null };
 
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     if (!workouts || workouts.length === 0) {

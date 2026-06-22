@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { updateIdea, deleteIdea } from "@/lib/ideas-supabase";
 import { getUserScopedDb } from "@/lib/owner-scope";
 

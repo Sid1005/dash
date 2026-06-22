@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { updateProblem, deleteProblem } from "@/lib/problems-supabase";
 import { getUserScopedDb } from "@/lib/owner-scope";
 

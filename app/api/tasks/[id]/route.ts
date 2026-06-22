@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import type { TaskRow } from "@/lib/tasks-types";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import { notifyHermesTaskCancel, notifyHermesTaskUpsert } from "@/lib/hermes-reminders";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -47,6 +48,7 @@ export async function PATCH(req: Request, ctx: Params) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    after(() => notifyHermesTaskUpsert(data as TaskRow));
     return NextResponse.json({ task: data as TaskRow });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -60,13 +62,18 @@ export async function DELETE(_req: Request, ctx: Params) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const scope = await getUserScopedDb();
-    const { error } = await scope.supabase
+    const { data, error } = await scope.supabase
       .from("tasks")
       .delete()
       .eq("id", id)
-      .eq("owner_user_id", scope.ownerUserId);
+      .eq("owner_user_id", scope.ownerUserId)
+      .select("id")
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+
+    after(() => notifyHermesTaskCancel(data.id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
