@@ -1,13 +1,11 @@
 import { after, NextResponse } from "next/server";
 import type { TaskRow } from "@/lib/tasks-types";
-import { rolloverOverdueTasks } from "@/lib/tasks-rollover";
 import { getUserScopedDb } from "@/lib/owner-scope";
 import { notifyHermesTaskUpsert } from "@/lib/hermes-reminders";
 
 export async function GET() {
   try {
     const scope = await getUserScopedDb();
-    await rolloverOverdueTasks(scope);
 
     const { data, error } = await scope.supabase
       .from("tasks")
