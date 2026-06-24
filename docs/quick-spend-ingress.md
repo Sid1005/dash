@@ -45,7 +45,7 @@ optional and default to current IST.
 ### Responses
 
 ```json
-{ "ok": true, "message": "Logged ₹320 for Zomato" }     // 200
+{ "ok": true, "message": "Logged Zomato: ₹320.00 (Food)" } // 200
 { "error": "unauthorized" }                              // 401 (bad key at route)
 { "error": "Unauthorized access" }                       // 401 (blocked by proxy)
 ```

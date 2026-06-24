@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { formatINR } from "@/lib/currency";
 import {
   DateNavigator,
   Eyebrow,
@@ -247,7 +248,7 @@ export function FoodSpendingPage() {
                 </div>
               }
             />
-            <LedgerHeader items={[{ label: "spent", value: `₹${data.VITALS.spend.today.toFixed(2)}`, of: `₹${data.VITALS.spend.target}` }]} />
+            <LedgerHeader items={[{ label: "spent", value: formatINR(data.VITALS.spend.today), of: formatINR(data.VITALS.spend.target, 0) }]} />
 
             {showAddForm && (
               <form
