@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, useRef, type PointerEvent as
 import { createPortal } from "react-dom";
 import { format, parseISO, subDays } from "date-fns";
 import { Pencil, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Check, Plus, Trash2, GripVertical, Lightbulb, Archive } from "lucide-react";
+import { formatINR } from "@/lib/currency";
 import type {
   ActivityApiRow,
   CockpitPostcard,
@@ -325,7 +326,7 @@ export function useDashData(
           t: s.time,
           who: "telegram",
           verb: "logged",
-          obj: `${s.item} · ₹${s.amount.toFixed(2)}`,
+          obj: `${s.item} · ${formatINR(s.amount)}`,
         })),
         ...activities.map<DashFeed>((a) => ({
           t: a.time,
@@ -884,7 +885,7 @@ export function SpendRow({ s, onDelete }: { s: DashData["SPEND"][number]; onDele
       <span className="mono" style={{ color: "var(--dim)", fontSize: 11 }}>{s.t}</span>
       <span style={{ color: "var(--text)" }}>{s.label}</span>
       <span className="mono uc" style={{ fontSize: 9, color: "var(--muted)", letterSpacing: "0.16em" }}>{s.cat}</span>
-      <span className="mono" style={{ color: "var(--text)", textAlign: "right" }}>₹{s.amount.toFixed(2)}</span>
+      <span className="mono" style={{ color: "var(--text)", textAlign: "right" }}>{formatINR(s.amount)}</span>
       <span>{onDelete && <DeleteBtn onClick={() => onDelete(s)} label="Delete spend" />}</span>
     </div>
   );
@@ -1398,8 +1399,8 @@ export function CockpitPage() {
           <TodayTile
             href="/food"
             label="Spending"
-            value={`₹${data.VITALS.spend.today.toFixed(0)}`}
-            detail={data.SPEND.length ? `${topSpendCategory} · ₹${data.VITALS.spend.target} target` : "₹0 today"}
+            value={formatINR(data.VITALS.spend.today, 0)}
+            detail={data.SPEND.length ? `${topSpendCategory} · ${formatINR(data.VITALS.spend.target, 0)} target` : `${formatINR(0, 0)} today`}
             progress={(data.VITALS.spend.today / data.VITALS.spend.target) * 100}
           />
           <TodayTile

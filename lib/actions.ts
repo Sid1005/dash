@@ -12,6 +12,7 @@ import { currentIstDate } from "./time";
 import { notifyHermesTaskUpsert } from "./hermes-reminders";
 import type { TaskRow } from "./tasks-types";
 import { isSpendCategory } from "./spending";
+import { formatINR } from "./currency";
 import {
   deleteTimeBlock,
   insertTimeBlock,
@@ -238,7 +239,7 @@ export async function applyParsedAction(
       category: normalizeSpendCategory((data.category as string) ?? "Other"),
     };
     await insertSpending(targetDate, entry, dbScope);
-    return `Logged ₹${entry.amount} for ${entry.item}`;
+    return `Logged ${formatINR(entry.amount)} for ${entry.item}`;
   }
 
   if (type === "multiple_spending") {
@@ -253,7 +254,7 @@ export async function applyParsedAction(
         }, dbScope)
       )
     );
-    return saved.map((s) => `₹${s.amount} for ${s.item}`).join(" · ");
+    return saved.map((s) => `${formatINR(Number(s.amount))} for ${s.item}`).join(" · ");
   }
 
   if (type === "food_and_spending") {
@@ -265,7 +266,7 @@ export async function applyParsedAction(
     await insertFoodEntry(targetDate, f, dbScope);
     await insertSpending(targetDate, s, dbScope);
     const est = f.estimated ? " (estimated)" : "";
-    return `Logged ${f.name}: ${f.calories} cal, ${f.protein_g}g protein${est} · ₹${s.amount}`;
+    return `Logged ${f.name}: ${f.calories} cal, ${f.protein_g}g protein${est} · ${formatINR(s.amount)}`;
   }
 
   if (type === "calendar_event_create") {
@@ -445,18 +446,18 @@ export function formatActionPreview(action: ParsedAction): string {
     const spendingDate = (data.spending as { date?: string } | undefined)?.date;
     const foodDate = (data.food as { date?: string } | undefined)?.date;
     const dateLabel = formatDateLabel((data.date as string) || spendingDate || foodDate);
-    return `I found *${f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *₹${s.amount}* spend${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
+    return `I found *${f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *${formatINR(s.amount)}* spend${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "spending") {
     const entry = data as unknown as SpendEntry;
     const dateLabel = formatDateLabel(data.date as string);
-    return `I parsed a spend${dateLabel}: *₹${entry.amount}* for *${entry.item}*.\nNote it down? Reply *yes* or *no*.`;
+    return `I parsed a spend${dateLabel}: *${formatINR(entry.amount)}* for *${entry.item}*.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "multiple_spending") {
     const expenses = (data.expenses ?? []) as Array<{ item: string; amount: number; category?: string }>;
-    const lines = expenses.map((e) => `*₹${e.amount}* for *${e.item}*`).join("\n");
+    const lines = expenses.map((e) => `*${formatINR(e.amount)}* for *${e.item}*`).join("\n");
     const dateLabel = formatDateLabel(data.date as string);
     return `I found ${expenses.length} expenses${dateLabel}:\n${lines}\nSave them? Reply *yes* or *no*.`;
   }

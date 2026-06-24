@@ -4,6 +4,7 @@ import { getDefaultOwnerDb } from "@/lib/owner-scope";
 import { insertSpending } from "@/lib/spending-supabase";
 import { matchSpendCategory } from "@/lib/spending";
 import { currentIstDate, currentIstTime } from "@/lib/time";
+import { formatINR } from "@/lib/currency";
 
 /** Reuse the LLM parser (categorization, multi-item) — allow it time to run. */
 export const maxDuration = 30;
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
     const row = await insertSpending(date, { item, amount, category, time }, scope);
     return NextResponse.json({
       ok: true,
-      message: `Logged ${item}: ₹${amount} (${category})`,
+      message: `Logged ${item}: ${formatINR(amount)} (${category})`,
       id: row.id,
     });
   } catch (e) {
