@@ -44,8 +44,8 @@ export function normalizeWorkoutExercises(exercises: RawWorkoutExercise[]): Norm
       ? exercise.sets
       : [
           {
-            reps: exercise.reps ?? exercise.weight_kg,
-            weight_kg: 0,
+            reps: exercise.reps,
+            weight_kg: exercise.weight_kg,
             notes: exercise.notes,
           },
         ];

@@ -88,6 +88,7 @@ type PersonalDataBundle = {
 };
 
 const MAX_RECORDS_PER_DOMAIN = 120;
+const MAX_WORKOUT_RECORDS = 300;
 const ALL_STORED_DATA_START = "1970-01-01";
 const ALL_DOMAINS: Domain[] = ["workouts", "food", "spending", "calendar", "ideas"];
 
@@ -214,10 +215,15 @@ function shouldUseFullWorkoutHistory(input: string): boolean {
   const lower = input.toLowerCase();
   const asksAboutWorkouts =
     /\b(workout|workouts|exercise|gym|sets?|reps?|chest|pecs?|pectorals?)\b/.test(lower);
-  const asksForHistory =
-    /\b(last|latest|most recent|previous|show|tell|list|history|when)\b/.test(lower);
+  const asksForSingleLatest = /\b(last|latest|most recent|previous)\b/.test(lower);
+  const asksForBodyPartHistory =
+    /\b(chest|pecs?|pectorals?)\b/.test(lower) &&
+    (asksForSingleLatest || /\b(show|tell|list|history|when)\b/.test(lower));
+  const asksForBroadHistory = /\b(show|tell|list|history|when)\b/.test(lower);
 
-  return asksAboutWorkouts && asksForHistory && !hasExplicitDateRange(input);
+  return asksAboutWorkouts &&
+    (asksForBodyPartHistory || (asksForBroadHistory && !asksForSingleLatest)) &&
+    !hasExplicitDateRange(input);
 }
 
 function isChestWorkoutQuestion(input: string): boolean {
@@ -292,7 +298,12 @@ Current time: ${nowContext}`,
   }
 }
 
-async function planQuestion(input: string, nowContext: string, today: string): Promise<QuestionPlan> {
+async function planQuestion(
+  input: string,
+  nowContext: string,
+  today: string,
+  deterministicInput = input
+): Promise<QuestionPlan> {
   try {
     const raw = await askGroqForJson(
       `Plan read-only data access for a personal dashboard question.
@@ -305,10 +316,10 @@ Never include domains outside the enum.
 Current time: ${nowContext}`,
       input
     );
-    return normalizePlan(raw, input, today);
+    return normalizePlan(raw, deterministicInput, today);
   } catch (error) {
     console.error("[Intelligence] Question planning failed:", error);
-    return normalizePlan(null, input, today);
+    return normalizePlan(null, deterministicInput, today);
   }
 }
 
@@ -332,7 +343,8 @@ async function fetchWorkouts(scope: DbScope, startDate: string, endDate: string)
     .gte("occurred_date", startDate)
     .lte("occurred_date", endDate)
     .order("occurred_date", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(MAX_WORKOUT_RECORDS);
 
   if (error) throw new Error(error.message);
   return (data ?? []) as WorkoutRow[];
@@ -405,7 +417,13 @@ async function fetchPersonalData(scope: DbScope, plan: QuestionPlan, input: stri
 
   await Promise.all(
     plan.domains.map(async (domain) => {
-      if (domain === "workouts") bundle.workouts = await fetchWorkouts(scope, plan.startDate, plan.endDate);
+      if (domain === "workouts") {
+        bundle.workouts = await fetchWorkouts(scope, plan.startDate, plan.endDate);
+        if (bundle.workouts.length >= MAX_WORKOUT_RECORDS) {
+          bundle.retrievalNote =
+            `Workout retrieval limited to the latest ${MAX_WORKOUT_RECORDS} records in the requested date range.`;
+        }
+      }
       if (domain === "food") bundle.food = await fetchFood(scope, plan.startDate, plan.endDate);
       if (domain === "spending") bundle.spending = await fetchSpending(scope, plan.startDate, plan.endDate);
       if (domain === "calendar") {
@@ -417,8 +435,10 @@ async function fetchPersonalData(scope: DbScope, plan: QuestionPlan, input: stri
 
   if (bundle.workouts && isChestWorkoutQuestion(input)) {
     bundle.workouts = latestChestWorkouts(bundle.workouts, 2);
-    bundle.retrievalNote =
-      "Chest workout question: searched full retrieved workout history and included only the latest two chest-matching workout sessions.";
+    bundle.retrievalNote = [
+      bundle.retrievalNote,
+      "Chest workout question: searched retrieved workout history and included only the latest two chest-matching workout sessions.",
+    ].filter(Boolean).join(" ");
   }
 
   return bundle;
@@ -434,8 +454,8 @@ export async function answerPersonalQuestion(
   const contextualQuestion = conversationContext
     ? `Recent conversation:\n${conversationContext}\n\nCurrent message: ${input}`
     : input;
-  const plan = await planQuestion(contextualQuestion, nowContext, today);
-  const data = await fetchPersonalData(scope, plan, contextualQuestion);
+  const plan = await planQuestion(contextualQuestion, nowContext, today, input);
+  const data = await fetchPersonalData(scope, plan, input);
 
   const system = `You answer questions about the user's personal dashboard data.
 Only use the provided JSON data. Do not invent missing records, dates, exercises, amounts, or calendar events.

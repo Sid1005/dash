@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { normalizeWorkoutExercises, summarizeWorkoutExercises } from "../lib/workout-normalization";
 
 describe("workout normalization", () => {
-  it("keeps setless bare-number exercises by recording the number as reps", () => {
-    expect(normalizeWorkoutExercises([{ name: "Squats", weight_kg: 150 }])).toEqual([
+  it("keeps setless bare-number exercises when provided as reps", () => {
+    expect(normalizeWorkoutExercises([{ name: "Squats", reps: 150 }])).toEqual([
       {
         exercise_name: "Squats",
         set_number: 1,
@@ -14,8 +14,20 @@ describe("workout normalization", () => {
     ]);
   });
 
+  it("preserves setless weight-only exercises as weight with no reps", () => {
+    expect(normalizeWorkoutExercises([{ name: "Squats", weight_kg: 150 }])).toEqual([
+      {
+        exercise_name: "Squats",
+        set_number: 1,
+        reps: 0,
+        weight_kg: 150,
+        notes: "",
+      },
+    ]);
+  });
+
   it("summarizes setless bare-number exercises as normal sets", () => {
-    expect(summarizeWorkoutExercises([{ name: "Squats", weight_kg: 150 }])).toBe("Squats (1 set)");
+    expect(summarizeWorkoutExercises([{ name: "Squats", reps: 150 }])).toBe("Squats (1 set)");
   });
 
   it("keeps exercise-only workouts", () => {
