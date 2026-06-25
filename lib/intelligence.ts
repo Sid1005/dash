@@ -243,6 +243,7 @@ async function planQuestion(input: string, nowContext: string, today: string): P
 Return only JSON with:
 {"domains":["workouts"|"food"|"spending"|"calendar"|"ideas"],"startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","focus":"short search/filter intent"}.
 Use Asia/Kolkata dates. "last week" means the previous Monday through Sunday calendar week. If no date is stated, use the last 30 days for time-series data. For idea questions without a date, still use the last 30 days unless the wording asks for all ideas.
+For workout questions, "last workout", "latest workout", and "most recent workout" mean the previous workout before today's already logged workout records, unless the user explicitly asks for today or a specific date/range. In that case, end the range on the day before the current date.
 Never include domains outside the enum.
 Current time: ${nowContext}`,
       input
@@ -365,9 +366,13 @@ export async function answerPersonalQuestion(
   input: string,
   nowContext: string,
   today: string,
-  scope: DbScope
+  scope: DbScope,
+  conversationContext?: string
 ): Promise<string> {
-  const plan = await planQuestion(input, nowContext, today);
+  const contextualQuestion = conversationContext
+    ? `Recent conversation:\n${conversationContext}\n\nCurrent message: ${input}`
+    : input;
+  const plan = await planQuestion(contextualQuestion, nowContext, today);
   const data = await fetchPersonalData(scope, plan);
 
   const system = `You answer questions about the user's personal dashboard data.
@@ -375,11 +380,12 @@ Only use the provided JSON data. Do not invent missing records, dates, exercises
 If the JSON has no relevant records, say that clearly and mention the date range checked.
 For spending, include totals when useful. For workouts, infer the user's requested focus from the question and exercise names, then include date, exercise, sets, reps, weights, and notes when present.
 For food, include calories/protein when useful. For calendar, include Dash schedule blocks when present.
+Use the recent conversation only to resolve follow-ups like "from last week", "that one", or omitted subjects. Answer the current message.
 Telegram formatting rules:
 - Never use Markdown tables; Telegram renders them badly.
 - Write a compact answer card: bold title, date/range line, then grouped bullets.
 - For workouts, group by exercise name and do not repeat identical set lines. Collapse sets with the same weight, reps, and notes into one bullet and append the count, for example: "- 4kg x 15 reps, 3 sets". Keep sets separate when their weight, reps, or notes differ. If reps are 0, say "no reps recorded" instead of "0 reps". Use "bodyweight" when weight is 0 or clearly bodyweight.
-- If the question asks for latest/most recent, answer with the single latest relevant record first. Mention if you skipped today or another excluded period.
+- If the question asks for last/latest/most recent workout, answer with the single latest relevant record before today's already logged workout records unless the user explicitly asked for today. Mention if you skipped today or another excluded period.
 - If the user asks for a body-part focus such as chest/back/legs/shoulders/arms, decide relevance from exercise names and common exercise knowledge.
 - If multiple records matter, show the most relevant 2-4 records and summarize the rest.
 - Keep lines short and skimmable on mobile.
@@ -395,6 +401,7 @@ Keep Telegram replies concise, plain Markdown-safe text, under 3500 characters.`
           role: "user",
           content: `Current time: ${nowContext}
 Question: ${input}
+${conversationContext ? `Recent conversation:\n${conversationContext}\n` : ""}
 Question plan: ${compactJson(plan)}
 Retrieved data: ${compactJson(data)}`,
         },
