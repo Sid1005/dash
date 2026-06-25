@@ -30,8 +30,10 @@ Classification rules (read the entire message before choosing a tool):
   - If the user sends a list of foods eaten across the day or multiple meals/items, use log_multiple_food. Estimate each item separately.
   - Use log_food only for a single food item or single combined meal.
 - For workout logs:
-  - Use log_workout only when the message records a workout that happened and contains one or more exercises with concrete set details such as reps and weights.
-  - Examples: "Bench press 3 sets of 10 at 50kg" or "Squats 5x5 at 80kg".
+  - Use log_workout when the message records a workout that happened and contains one or more exercises. A workout does not have to include sets or reps.
+  - If an exercise has a weight but no reps or set count, still log it with reps: 0 and the stated weight_kg.
+  - If an exercise has no reps, set count, or weight, still log it with reps: 0 and weight_kg: 0.
+  - Examples: "Bench press 3 sets of 10 at 50kg", "Squats 5x5 at 80kg", or "Squats 150".
 - For unsupported notes / journals:
   - Do not save generic notes or journal entries. Use chat_response to say the message was not saved and ask for a supported log type if needed.
 - For calendar events:
@@ -53,7 +55,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "log_workout",
-      description: "Record a completed structured workout containing at least one exercise with concrete set details. Examples include 'Bench press 3 sets of 10 at 50kg' and 'Squats 5x5 at 80kg'.",
+      description: "Record a completed workout containing at least one exercise. Sets and reps are optional; for weight-only entries like 'Squats 150', use one set with reps 0 and weight_kg 150. For exercise-only entries, use reps 0 and weight_kg 0.",
       parameters: {
         type: "object",
         properties: {
@@ -72,8 +74,8 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
                   items: {
                     type: "object",
                     properties: {
-                      reps: { type: "integer" },
-                      weight_kg: { type: "number", description: "Weight in kg. If bodyweight, use 0." }
+                      reps: { type: "integer", description: "Reps completed. Use 0 when reps were not specified." },
+                      weight_kg: { type: "number", description: "Weight in kg. If bodyweight, use 0. If the user provides a bare number for a lift, treat it as kg." }
                     },
                     required: ["reps", "weight_kg"]
                   }

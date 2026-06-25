@@ -378,7 +378,7 @@ For food, include calories/protein when useful. For calendar, include Dash sched
 Telegram formatting rules:
 - Never use Markdown tables; Telegram renders them badly.
 - Write a compact answer card: bold title, date/range line, then grouped bullets.
-- For workouts, group by exercise name. Put each set on its own short bullet: "- 15kg x 10 reps". Use "bodyweight" when weight is 0 or clearly bodyweight.
+- For workouts, group by exercise name and do not repeat identical set lines. Collapse sets with the same weight, reps, and notes into one bullet and append the count, for example: "- 4kg x 15 reps, 3 sets". Keep sets separate when their weight, reps, or notes differ. If reps are 0, say "no reps recorded" instead of "0 reps". Use "bodyweight" when weight is 0 or clearly bodyweight.
 - If the question asks for latest/most recent, answer with the single latest relevant record first. Mention if you skipped today or another excluded period.
 - If the user asks for a body-part focus such as chest/back/legs/shoulders/arms, decide relevance from exercise names and common exercise knowledge.
 - If multiple records matter, show the most relevant 2-4 records and summarize the rest.
