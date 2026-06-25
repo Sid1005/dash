@@ -40,10 +40,15 @@ export function normalizeWorkoutExercises(exercises: RawWorkoutExercise[]): Norm
     const name = exercise.name?.trim();
     if (!name) return [];
 
-    const sourceSets =
-      Array.isArray(exercise.sets) && exercise.sets.length > 0
-        ? exercise.sets
-        : [{ reps: exercise.reps, weight_kg: exercise.weight_kg, notes: exercise.notes }];
+    const sourceSets = Array.isArray(exercise.sets) && exercise.sets.length > 0
+      ? exercise.sets
+      : [
+          {
+            reps: exercise.reps ?? exercise.weight_kg,
+            weight_kg: 0,
+            notes: exercise.notes,
+          },
+        ];
 
     return sourceSets.map((set, index) => ({
       exercise_name: name,
