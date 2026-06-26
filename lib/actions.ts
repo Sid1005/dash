@@ -13,6 +13,7 @@ import { notifyHermesTaskUpsert } from "./hermes-reminders";
 import type { TaskRow } from "./tasks-types";
 import { isSpendCategory } from "./spending";
 import { formatINR } from "./currency";
+import { normalizeWorkoutExercises, summarizeWorkoutExercises, type RawWorkoutExercise } from "./workout-normalization";
 import {
   deleteTimeBlock,
   insertTimeBlock,
@@ -357,10 +358,8 @@ export async function applyParsedAction(
   }
 
   if (type === "workout") {
-    type ExerciseSet = { reps: number; weight_kg: number };
-    type Exercise = { name: string; sets: ExerciseSet[]; notes?: string };
     const workoutDate = (data.date as string) || targetDate;
-    const exercises = (data.exercises as Exercise[]) ?? [];
+    const exercises = (data.exercises as RawWorkoutExercise[]) ?? [];
     // Insert workout row
     const { data: wk, error: wkErr } = await dbScope.supabase
       .from("workouts")
@@ -369,24 +368,23 @@ export async function applyParsedAction(
       .single();
     if (wkErr) throw new Error(wkErr.message);
 
-    // Insert one row per set per exercise
-    const setRows = exercises.flatMap((ex) =>
-      ex.sets.map((s, si) => ({
+    // Insert one row per set per exercise. Weight-only entries are represented
+    // with reps = 0 so the exercise is still saved.
+    const setRows = normalizeWorkoutExercises(exercises).map((s) => ({
         workout_id: wk.id,
         owner_user_id: dbScope.ownerUserId,
-        exercise_name: ex.name,
-        set_number: si + 1,
+        exercise_name: s.exercise_name,
+        set_number: s.set_number,
         reps: s.reps,
         weight_kg: s.weight_kg,
-        notes: ex.notes ?? "",
-      }))
-    );
+        notes: s.notes,
+      }));
     if (setRows.length > 0) {
       const { error: exErr } = await dbScope.supabase.from("workout_exercises").insert(setRows);
       if (exErr) throw new Error(exErr.message);
     }
 
-    const summary = exercises.map((e) => `${e.name} (${e.sets.length} sets)`).join(", ");
+    const summary = summarizeWorkoutExercises(exercises);
     return `Workout logged: ${summary || "no exercises recorded"}`;
   }
 

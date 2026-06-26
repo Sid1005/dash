@@ -22,6 +22,9 @@ import { type ParsedAction } from "@/lib/parse";
 /** Extend invocation until `after()` tasks finish (LLM + Telegram API). */
 export const maxDuration = 60;
 
+const MAX_CHAT_HISTORY_LINES = 4;
+type PendingRecord = Awaited<ReturnType<typeof getPending>>;
+
 function isDirectSlashCommand(text: string): boolean {
   const normalized = text.trim().toLowerCase();
   return normalized.startsWith("/") || normalized.startsWith("slash ");
@@ -40,6 +43,22 @@ function isConfirmYes(text: string): boolean {
 function isConfirmNo(text: string): boolean {
   const normalized = text.trim().toLowerCase();
   return normalized === "no" || normalized === "n" || normalized === "cancel";
+}
+
+function trimChatHistory(history: string[]): string[] {
+  return history.filter((line) => line.trim().length > 0).slice(-MAX_CHAT_HISTORY_LINES);
+}
+
+function chatHistoryFromPending(pending: PendingRecord): string[] {
+  if (pending?.action?.type !== "chat") return [];
+  const rawHistory = (pending.action.data as Record<string, unknown>)?.history;
+  if (!Array.isArray(rawHistory)) return [];
+  return trimChatHistory(rawHistory.filter((line): line is string => typeof line === "string"));
+}
+
+function inputWithHistory(text: string, history: string[]): string {
+  if (history.length === 0) return text;
+  return `Recent conversation:\n${history.join("\n")}\n\nCurrent message: ${text}`;
 }
 
 async function processCallbackQuery(body: Record<string, unknown>) {
@@ -63,7 +82,7 @@ async function processCallbackQuery(body: Record<string, unknown>) {
 
     if (data === "confirm_yes") {
       const pending = await getPending(chatId);
-      if (!pending) {
+      if (!pending || pending.action.type === "chat") {
         await sendTelegramMessage(chatId, "No pending item to save. Send a new message first.");
         return;
       }
@@ -85,6 +104,9 @@ async function processMessage(
   base64Image?: string
 ) {
   try {
+    const pending = await getPending(chatId);
+    const pendingAction = pending && pending.action.type !== "chat" ? pending.action : undefined;
+
     if (!base64Image) {
       if (isConfirmNo(text)) {
         await clearPending(chatId);
@@ -93,8 +115,7 @@ async function processMessage(
       }
 
       if (isConfirmYes(text)) {
-        const pending = await getPending(chatId);
-        if (!pending) {
+        if (!pending || pending.action.type === "chat") {
           await sendTelegramMessage(chatId, "No pending item to save. Send a food line or /food command.");
           return;
         }
@@ -112,28 +133,34 @@ async function processMessage(
         return;
       }
 
-      const intent = await classifyTelegramIntent(text, `${today} ${now} (${weekday})`);
+      const history = chatHistoryFromPending(pending);
+      const contextualInput = inputWithHistory(text, history);
+      const intent = await classifyTelegramIntent(contextualInput, `${today} ${now} (${weekday})`);
       if (intent.intent === "question") {
         const answer = await answerPersonalQuestion(
           text,
           `${today} ${now} (${weekday})`,
           today,
-          await getDefaultOwnerDb()
+          await getDefaultOwnerDb(),
+          history.join("\n")
         );
+        if (!pendingAction) {
+          const nextHistory = trimChatHistory([...history, `User: ${text}`, `AI: ${answer}`]);
+          const chatAction: ParsedAction = {
+            type: "chat",
+            data: { history: nextHistory, response: answer },
+          };
+          await setPending(chatId, chatAction, today);
+        }
         await sendTelegramMessage(chatId, answer);
         return;
       }
     }
 
-    const pending = await getPending(chatId);
-    const pendingAction = pending && pending.action.type !== "chat" ? pending.action : undefined;
-
-    let history: string[] = [];
-    if (pending?.action?.type === "chat" && Array.isArray((pending.action.data as Record<string, unknown>)?.history)) {
-      history = (pending.action.data as Record<string, unknown>).history as string[];
-    }
+    let history = chatHistoryFromPending(pending);
     if (text) {
       history.push(`User: ${text}`);
+      history = trimChatHistory(history);
     }
 
     const parseInputString = pendingAction ? text : history.join("\n");
@@ -150,7 +177,7 @@ async function processMessage(
         await sendTelegramMessage(chatId, action.data.response as string);
         return;
       }
-      history.push(`AI: ${action.data.response}`);
+      history = trimChatHistory([...history, `AI: ${action.data.response}`]);
       const chatAction: ParsedAction = {
         type: "chat",
         data: { history, response: action.data.response },

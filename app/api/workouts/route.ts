@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import { normalizeWorkoutExercises, type RawWorkoutExercise } from "@/lib/workout-normalization";
 
 export async function GET() {
   try {
@@ -34,9 +35,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { date, exercises } = await req.json() as {
+    const { date, exercises = [] } = await req.json() as {
       date: string;
-      exercises: { name: string; sets: { reps: number; weight_kg: number }[]; notes?: string }[];
+      exercises?: RawWorkoutExercise[];
     };
     const { supabase, ownerUserId } = await getUserScopedDb();
 
@@ -73,17 +74,15 @@ export async function POST(req: NextRequest) {
 
     if (wkErr || !wk) return NextResponse.json({ error: wkErr?.message || "Failed to create workout" }, { status: 500 });
 
-    const setRows = exercises.flatMap((ex) =>
-      ex.sets.map((s, si) => ({
+    const setRows = normalizeWorkoutExercises(exercises).map((s) => ({
         workout_id: wk.id,
         owner_user_id: ownerUserId,
-        exercise_name: ex.name,
-        set_number: si + 1,
+        exercise_name: s.exercise_name,
+        set_number: s.set_number,
         reps: s.reps,
         weight_kg: s.weight_kg,
-        notes: ex.notes ?? "",
-      }))
-    );
+        notes: s.notes,
+      }));
 
     if (setRows.length > 0) {
       const { error: exErr } = await supabase.from("workout_exercises").insert(setRows);
@@ -118,9 +117,9 @@ export async function DELETE(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { id, exercises, date } = await req.json() as {
+    const { id, exercises = [], date } = await req.json() as {
       id: string;
-      exercises: { name: string; sets: { reps: number; weight_kg: number }[]; notes?: string }[];
+      exercises?: RawWorkoutExercise[];
       date?: string;
     };
     if (!id) {
@@ -147,17 +146,15 @@ export async function PUT(req: NextRequest) {
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
     // 2. Prepare new rows
-    const setRows = exercises.flatMap((ex) =>
-      ex.sets.map((s, si) => ({
+    const setRows = normalizeWorkoutExercises(exercises).map((s) => ({
         workout_id: id,
         owner_user_id: ownerUserId,
-        exercise_name: ex.name,
-        set_number: si + 1,
+        exercise_name: s.exercise_name,
+        set_number: s.set_number,
         reps: s.reps,
         weight_kg: s.weight_kg,
-        notes: ex.notes ?? "",
-      }))
-    );
+        notes: s.notes,
+      }));
 
     // 3. Insert new rows
     if (setRows.length > 0) {
@@ -170,4 +167,3 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }
-
