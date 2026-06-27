@@ -365,6 +365,361 @@ a {
 .clean-button.primary { border-color: #000000; background: #000000; color: #ffffff; }
 .clean-button:disabled { cursor: not-allowed; opacity: 0.45; }
 
+.cockpit-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    var(--bg);
+  background-size: 24px 24px;
+}
+
+.cockpit-demo-shell {
+  width: min(1420px, calc(100vw - 44px));
+  margin: 0 auto;
+  padding: 18px 0 42px;
+}
+
+.cockpit-demo-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.9fr) minmax(460px, 1.1fr);
+  grid-template-areas:
+    "now ticket"
+    "lower lower";
+  gap: 18px;
+  align-items: start;
+}
+
+.cockpit-now-card {
+  grid-area: now;
+}
+
+.cockpit-ticket-card {
+  grid-area: ticket;
+}
+
+.cockpit-primary-card {
+  min-height: max(560px, calc(100vh - 145px));
+}
+
+.cockpit-card {
+  position: relative;
+  border: 3px solid #000000;
+  background: var(--card);
+  box-shadow: 6px 6px 0 #000000;
+  padding: 16px;
+}
+
+.cockpit-card.compact {
+  padding: 14px;
+}
+
+.cockpit-card-title {
+  margin: 0;
+  font-size: clamp(20px, 1.8vw, 28px);
+  line-height: 1.08;
+  font-weight: 900;
+}
+
+.cockpit-copy {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.36;
+}
+
+.cockpit-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.now-item {
+  border: 2px solid #000000;
+  background: #ffffff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.now-item:first-child {
+  background: #fef08a;
+}
+
+.now-item h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.12;
+}
+
+.agent-quick-tag {
+  border: 1.5px solid #000000;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.ticket-composer {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  border: 3px solid #000000;
+  background: #ffffff;
+  padding: 13px;
+  outline: none;
+  line-height: 1.35;
+  box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.08);
+  margin-top: 12px;
+}
+
+.ticket-composer:focus {
+  box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.08), 3px 3px 0 #000000;
+}
+
+.required-chip {
+  position: relative;
+  border: 1.5px solid #000000;
+  background: #ffffff;
+  padding: 5px 8px 5px 22px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.required-chip b,
+.required-chip span {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.required-chip b {
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.required-chip span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.22;
+}
+
+.required-chip.complete {
+  background: #86efac;
+}
+
+.required-chip.complete::before {
+  content: "✓";
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.required-chip.complete::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 6px;
+  top: 50%;
+  border-top: 2px solid #000000;
+  transform: rotate(-5deg);
+}
+
+.cockpit-action-button {
+  border: 2px solid #000000;
+  background: #000000;
+  color: #ffffff;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  box-shadow: 3px 3px 0 #777770;
+  cursor: pointer;
+}
+
+.cockpit-action-button.secondary {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 3px 3px 0 #000000;
+}
+
+.cockpit-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cockpit-lower-grid {
+  grid-area: lower;
+  margin-top: 26px;
+}
+
+.now-drop-zone {
+  border: 2px dashed #000000;
+  background: rgba(255, 255, 255, 0.42);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.saved-ticket-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.saved-ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.saved-ticket-empty {
+  border: 2px dashed rgba(0, 0, 0, 0.45);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 18px;
+  text-align: center;
+}
+
+.saved-ticket-card {
+  border: 2px solid #000000;
+  background: #ffffff;
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+  cursor: grab;
+}
+
+.saved-ticket-card:active {
+  cursor: grabbing;
+}
+
+.saved-ticket-card h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.saved-ticket-subtasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.saved-ticket-subtasks span {
+  border: 1px solid rgba(0, 0, 0, 0.38);
+  padding: 2px 5px;
+}
+
+.saved-ticket-add-subtask {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.saved-ticket-add-subtask input {
+  width: 100%;
+  min-width: 0;
+  border: 1.5px solid #000000;
+  background: #ffffff;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.saved-ticket-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.saved-ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.saved-ticket-edit {
+  display: grid;
+  gap: 7px;
+}
+
+.saved-ticket-edit input {
+  width: 100%;
+  min-width: 0;
+  border: 2px solid #000000;
+  background: #ffffff;
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  outline: none;
+}
+
+.saved-ticket-edit div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ticket-move-button {
+  border: 1.5px solid #000000;
+  background: #ffffff;
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.ticket-move-button.danger {
+  background: #fca5a5;
+}
+
+.ticket-move-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 900px) {
   .cockpit-layout { flex-direction: column; }
   .today-strip {
@@ -374,4 +729,37 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .cockpit-toolbar { flex-wrap: wrap; }
+}
+
+@media (max-width: 1150px) {
+  .cockpit-demo-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "now"
+      "ticket"
+      "lower";
+  }
+
+  .cockpit-lower-grid {
+    margin-top: 0;
+  }
+
+  .saved-ticket-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cockpit-primary-card {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .cockpit-demo-shell {
+    width: min(100vw - 24px, 1460px);
+    padding-top: 14px;
+  }
+
+  .saved-ticket-grid {
+    grid-template-columns: 1fr;
+  }
 }
