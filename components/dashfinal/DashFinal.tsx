@@ -1545,18 +1545,20 @@ function TicketCard({
         onDoubleClick={() => setEditing(true)}
         style={{
           cursor: "pointer",
+          position: "relative",
           display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
+          alignItems: "center",
+          justifyContent: "center",
           gap: 10,
+          paddingRight: 44,
           background: accent
         }}
       >
         <div className="saved-ticket-header-copy">
-          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "center" }}>
             {ticket.title}
           </span>
-          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0 }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0, textAlign: "center" }}>
             {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
           </span>
         </div>
@@ -1566,6 +1568,7 @@ function TicketCard({
           onClick={() => void onDelete(ticket.id)}
           title="Delete ticket"
           aria-label={`Delete ticket ${ticket.title}`}
+          style={{ position: "absolute", right: 0, top: 0, bottom: 0, margin: "auto 0" }}
         >
           ×
         </button>
