@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO } from "date-fns";
 import { Pencil, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Check, Plus, Trash2, GripVertical, Lightbulb, Archive } from "lucide-react";
 import { formatINR } from "@/lib/currency";
+import type { TicketRow, TicketSubtaskDetails } from "@/lib/tickets-types";
 import type {
   CockpitPostcard,
   DashBlock,
@@ -13,10 +14,7 @@ import type {
   DashFeed,
   DashTask,
   FoodApiRow,
-  Idea,
   SpendApiRow,
-  SystemPostcardId,
-  SystemPostcardPositions,
   TaskApiRow,
   TimeBlockApiRow,
   WorkoutApiRow,
@@ -253,7 +251,6 @@ export function useDashData(
         done: task.done,
         due_at: task.due_at,
       }));
-
       const meals = food.map((f) => ({
         id: f.id,
         t: f.time,
@@ -434,15 +431,15 @@ type NavItemId = "cockpit" | "tasksCalendar" | "food" | "workouts";
 
 function Nav({ active }: { active: NavItemId }) {
   return (
-    <nav style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+    <nav style={{ display: "flex", alignItems: "center", gap: 26, flexShrink: 0 }}>
       {NAV_ITEMS.map((item) => (
         <Link
           key={item.id}
           href={item.href}
           className={`mono nav-link ${item.id === active ? "nav-link-active" : ""}`}
           style={{
-            fontSize: 11,
-            letterSpacing: "0.05em",
+            fontSize: 15,
+            letterSpacing: "0.04em",
             textTransform: "lowercase",
             outline: "none",
           }}
@@ -469,43 +466,44 @@ export function PageHeader({ active, data }: { active: NavItemId; data: DashData
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "16px 40px",
-        borderBottom: "1px solid var(--line)",
+        padding: "18px 30px",
+        borderBottom: "2px solid var(--line)",
         backgroundColor: "var(--bg)",
         flexShrink: 0,
         zIndex: 100
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div
           style={{
-            width: 22,
-            height: 22,
-            border: "2px solid var(--text)",
+            width: 30,
+            height: 30,
+            background: "var(--text)",
+            borderRadius: 4,
             display: "grid",
             placeItems: "center",
-            fontFamily: "var(--mono)",
-            fontSize: 12,
-            fontWeight: 800,
-            color: "var(--text)"
+            fontFamily: "var(--sans)",
+            fontSize: 16,
+            fontWeight: 700,
+            color: "#ffffff"
           }}
         >
           D
         </div>
-        <span className="mono" style={{ fontSize: 12, letterSpacing: "0.15em", fontWeight: 600 }}>
+        <span className="mono" style={{ fontSize: 15, letterSpacing: "0.18em", fontWeight: 700, color: "var(--text)" }}>
           DASH
         </span>
       </div>
 
       <Nav active={active} />
 
-      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-        <span className="mono" style={{ fontSize: 16, fontWeight: 500 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
           {t}
         </span>
-        <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "var(--muted)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
-          <span style={{ width: 5, height: 5, borderRadius: 999, background: "var(--text)" }} />
-          synced
+        <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#6B675E", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2FBF71" }} />
+          SYNCED
         </span>
       </div>
     </header>
@@ -806,7 +804,6 @@ export function TaskRow({ t, onToggle, onDelete }: { t: DashTask; onToggle?: (ta
     </div>
   );
 }
-
 export function MealRow({ m, onDelete }: { m: DashData["MEALS"][number]; onDelete?: (m: DashData["MEALS"][number]) => void }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "56px 1fr 64px 50px 24px", gap: 14, alignItems: "center", padding: "12px 0", borderBottom: "1px dashed var(--line)", fontSize: 14 }}>
@@ -958,690 +955,1095 @@ export function DayTimeline({
   );
 }
 
-function createDefaultCockpitCards(): CockpitPostcard[] {
-  return [
-    {
-      id: "doing",
-      title: "What I am doing",
-      x: 42,
-      y: 42,
-      items: [
-        { id: "doing-1", text: "Keep the current work visible", done: false },
-      ],
-    },
-    {
-      id: "thinking",
-      title: "Thinking space",
-      x: 370,
-      y: 176,
-      items: [
-        { id: "thinking-1", text: "Capture the next useful move", done: false },
-      ],
-    },
-  ];
-}
+type CockpitAgent = "codex" | "claude" | "hermes" | "openclaw";
+type CockpitImportance = "low" | "medium" | "high" | "urgent";
 
-function createDefaultSystemPostcardPositions(): SystemPostcardPositions {
-  return {
-    problems: { x: 698, y: 42 },
-  };
-}
-
-function CockpitPostcardShell({
-  title,
-  eyebrow,
-  count,
-  x,
-  y,
-  children,
-  onPointerDown,
-}: {
+type CockpitTicketDraft = {
   title: string;
+  dueDate: string;
+  dueAt: string;
+  importance: CockpitImportance | "";
+  subtasks: string[];
+  agent: CockpitAgent | null;
+};
+
+const AGENT_LABELS: Record<CockpitAgent, string> = {
+  codex: "Codex",
+  claude: "Claude",
+  hermes: "Hermes",
+  openclaw: "OpenClaw",
+};
+
+const COCKPIT_BLUE = "#7dd3fc";
+
+const AGENT_COLORS: Record<CockpitAgent, string> = {
+  codex: COCKPIT_BLUE,
+  claude: COCKPIT_BLUE,
+  hermes: COCKPIT_BLUE,
+  openclaw: COCKPIT_BLUE,
+};
+
+const IMPORTANCE_LABELS: Record<CockpitImportance, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+function titleCaseText(value: string) {
+  return value
+    .trim()
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function ticketDueText(ticket: TicketRow) {
+  if (ticket.due_label) return ticket.due_label;
+  if (ticket.due_at) return dueLabel(ticket.due_at);
+  return "No due date";
+}
+
+function ticketImportanceText(ticket: TicketRow) {
+  return ticket.importance ? IMPORTANCE_LABELS[ticket.importance] : "No priority";
+}
+
+function ticketSubtaskDetails(ticket: TicketRow): TicketSubtaskDetails {
+  return ticket.subtask_details ?? {};
+}
+
+function localDueAt(daysFromToday: number) {
+  const [year, month, day] = localIsoDate().split("-").map(Number);
+  const due = new Date(year, month - 1, day + daysFromToday, 18, 0, 0, 0);
+  return due.toISOString();
+}
+
+function localDueAtHour(daysFromToday: number, hour: number) {
+  const [year, month, day] = localIsoDate().split("-").map(Number);
+  const due = new Date(year, month - 1, day + daysFromToday, hour, 0, 0, 0);
+  return due.toISOString();
+}
+
+function stripFieldLines(value: string) {
+  return value
+    .split(/\n+/)
+    .filter((line) => {
+      if (/^\s*(due|deadline|by|importance|priority|subtasks?|steps?)\b/i.test(line)) return false;
+      if (/^\s*(urgent|high|medium|low|important|very important|low priority)\s*$/i.test(line)) return false;
+      return true;
+    })
+    .join(" ")
+    .trim();
+}
+
+function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): CockpitTicketDraft {
+  const lower = text.toLowerCase();
+  const agentMatch = text.match(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)/i);
+  const agent = agentMatch
+    ? agentMatch[1].toLowerCase().replace(/\s+/g, "") === "openfloor"
+      ? "openclaw"
+      : agentMatch[1].toLowerCase().replace(/\s+/g, "") as CockpitAgent
+    : selectedAgent;
+  const cleaned = text.replace(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)/ig, "").trim();
+  const beforeSubtasks = stripFieldLines(cleaned).split(/\bsubtasks?\b/i)[0] ?? "";
+  const firstTitleChunk = beforeSubtasks.split(/[.!?]/).find((chunk) => chunk.trim()) ?? "";
+  const title = titleCaseText(firstTitleChunk.replace(/\b(by|before|due|deadline)\b.*$/i, ""));
+
+  let dueDate = "";
+  let dueAt = "";
+  if (lower.includes("tonight")) {
+    dueDate = "Tonight";
+    dueAt = localDueAtHour(0, 22);
+  } else if (lower.includes("today")) {
+    dueDate = "Today";
+    dueAt = localDueAt(0);
+  } else if (lower.includes("eod") || lower.includes("end of day")) {
+    dueDate = "Today";
+    dueAt = localDueAtHour(0, 18);
+  } else if (lower.includes("tomorrow")) {
+    dueDate = "Tomorrow";
+    dueAt = localDueAt(1);
+  } else if (lower.includes("this week") || lower.includes("next week")) {
+    dueDate = "This week";
+    dueAt = localDueAt(5);
+  } else if (lower.includes("month")) {
+    dueDate = "This month";
+    dueAt = localDueAt(21);
+  }
+
+  let importance: CockpitImportance | "" = "";
+  if (lower.includes("urgent") || lower.includes("asap")) importance = "urgent";
+  else if (lower.includes("very important") || lower.includes("must")) importance = "high";
+  else if (lower.includes("important")) importance = "medium";
+  else if (lower.includes("low priority")) importance = "low";
+  const subtaskMatch = cleaned.match(/\b(?:subtasks?|steps?)\b\s*(?::|->|-)?\s*([\s\S]*)/i);
+  const subtasks = subtaskMatch
+    ? subtaskMatch[1]
+        .split(/,|\n|;|\s+-\s+/)
+        .map((item) => titleCaseText(item.replace(/^[-*]\s*/, "").replace(/[.!?]+$/g, "")))
+        .filter(Boolean)
+    : [];
+
+  return { title, dueDate, dueAt, importance, subtasks, agent };
+}
+
+function CockpitCard({
+  eyebrow,
+  tone = "#ffffff",
+  className = "",
+  headerMeta,
+  style,
+  children,
+}: {
   eyebrow: string;
-  count?: string;
-  x: number;
-  y: number;
+  tone?: string;
+  className?: string;
+  headerMeta?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
-  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }) {
   return (
-    <div
-      className="grid-card deck-card"
-      style={{
-        position: "absolute",
-        left: x,
-        top: y,
-        width: 292,
-        minHeight: 220,
-        padding: 0,
-        overflow: "hidden",
-        background: "#fffdf5",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <div
-        onPointerDown={onPointerDown}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          borderBottom: "2px solid #000000",
-          background: "#fef08a",
-          padding: "12px 14px",
-          cursor: onPointerDown ? "grab" : "default",
-          touchAction: "none",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div className="mono" style={{ fontSize: 8.5, fontWeight: 900, textTransform: "uppercase", color: "#0c0c0e", marginBottom: 3 }}>
-            ↳ {eyebrow}
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {title}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {count && <span className="mono" style={{ fontSize: 11 }}>{count}</span>}
-          {onPointerDown && <GripVertical size={15} />}
-        </div>
+    <section className={`cockpit-card ${className}`.trim()} style={style}>
+      <span className="zine-paperclip" />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 12 }}>
+        <div className="zine-eyebrow" style={{ background: tone, marginBottom: 0 }}>{eyebrow}</div>
+        {headerMeta && (
+          <span className="mono" style={{ fontSize: 9.5, color: "var(--muted)", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 36 }}>
+            {headerMeta}
+          </span>
+        )}
       </div>
       {children}
+    </section>
+  );
+}
+
+function MiniPill({
+  children,
+  tone = "#ffffff",
+  filled = true,
+}: {
+  children: React.ReactNode;
+  tone?: string;
+  filled?: boolean;
+}) {
+  return (
+    <span
+      className="mono"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        minHeight: 22,
+        border: "1.5px solid #000000",
+        background: filled ? tone : "transparent",
+        padding: "2px 7px",
+        fontSize: 10,
+        fontWeight: 900,
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function RequiredFieldChips({ draft }: { draft: CockpitTicketDraft }) {
+  const fields = [
+    ["TITLE", draft.title],
+    ["DUE", draft.dueDate ? draft.dueDate.toLowerCase() : ""],
+    ["IMPORTANCE", draft.importance ? IMPORTANCE_LABELS[draft.importance].toLowerCase() : ""],
+    ["SUBTASKS", draft.subtasks.length ? String(draft.subtasks.length) : ""],
+  ] as const;
+
+  return (
+    <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 8, margin: "14px 0 16px" }}>
+      {fields.map(([label, value]) => {
+        const complete = Boolean(value);
+        return (
+          <span key={label} className={`required-chip ${complete ? "complete" : ""}`}>
+            <b>{label}</b>
+            {complete ? (
+              <>
+                <span style={{ margin: "0 2px" }}>·</span>
+                <span>{value}</span>
+              </>
+            ) : (
+              <span style={{ marginLeft: 6 }}>waiting</span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
 
-function TodayTile({
-  href,
-  label,
-  value,
-  detail,
-  progress,
+function AgentQuickTags({
+  selectedAgent,
+  onSelect,
 }: {
-  href: string;
-  label: string;
-  value: string;
-  detail: string;
-  progress?: number;
+  selectedAgent: CockpitAgent | null;
+  onSelect: (agent: CockpitAgent | null) => void;
 }) {
   return (
-    <Link href={href} className="today-tile">
-      <div className="eyebrow-tag" style={{ marginBottom: 10 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {value}
-      </div>
-      <div className="mono" style={{ marginTop: 5, fontSize: 9.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {detail}
-      </div>
-      {progress !== undefined && (
-        <div style={{ height: 4, marginTop: 10, overflow: "hidden", background: "var(--card-2)", border: "1px solid #000000" }}>
-          <div style={{ width: `${Math.min(100, Math.max(0, progress))}%`, height: "100%", background: "#000000" }} />
-        </div>
-      )}
-    </Link>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => onSelect(null)}
+        className={`agent-quick-tag mono ${selectedAgent === null ? "active" : ""}`}
+        style={{ background: selectedAgent === null ? COCKPIT_BLUE : "#ffffff" }}
+      >
+        No agent
+      </button>
+      {(Object.keys(AGENT_LABELS) as CockpitAgent[])
+        .filter((agent) => agent !== "openclaw")
+        .map((agent) => (
+          <button
+            key={agent}
+            type="button"
+            onClick={() => onSelect(agent)}
+            className={`agent-quick-tag mono ${selectedAgent === agent ? "active" : ""}`}
+            style={{ background: selectedAgent === agent ? COCKPIT_BLUE : "#ffffff" }}
+          >
+            @{AGENT_LABELS[agent].toUpperCase()}
+          </button>
+        ))}
+    </div>
   );
 }
 
-function estimatedIdeaNoteHeight(text: string) {
-  const estimatedLines = Math.max(1, Math.ceil(text.length / 28));
-  const bodyHeight = Math.max(38, estimatedLines * 18 + 20);
-  return 30 + bodyHeight + 31;
+function subtaskStatus(ticket: TicketRow, subtask: string) {
+  return ticketSubtaskDetails(ticket)[subtask]?.status ?? "backlog";
+}
+
+function subtaskDetailText(ticket: TicketRow, subtask: string) {
+  return ticketSubtaskDetails(ticket)[subtask]?.details?.trim() ?? "";
+}
+
+function SubtaskMiniCard({
+  ticket,
+  subtask,
+  compact = false,
+  onMoveSubtask,
+  onUpdateSubtask,
+  onDeleteSubtask,
+}: {
+  ticket: TicketRow;
+  subtask: string;
+  compact?: boolean;
+  onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
+  onUpdateSubtask: (id: string, oldSubtask: string, nextSubtask: string, details: string) => Promise<void>;
+  onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
+}) {
+  const [titleDraft, setTitleDraft] = useState(subtask);
+  const [detailDraft, setDetailDraft] = useState(subtaskDetailText(ticket, subtask));
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const status = subtaskStatus(ticket, subtask);
+  const details = subtaskDetailText(ticket, subtask);
+
+  useEffect(() => {
+    setTitleDraft(subtask);
+    setDetailDraft(subtaskDetailText(ticket, subtask));
+  }, [ticket, subtask]);
+
+  const saveSubtask = async () => {
+    const nextTitle = titleCaseText(titleDraft);
+    if (!nextTitle) return;
+    setBusy(true);
+    try {
+      await onUpdateSubtask(ticket.id, subtask, nextTitle, detailDraft.trim());
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#FFFCE8", border: "1.5px solid #16130F", padding: "10px 10px", boxShadow: "2px 2px 0 rgba(20,17,12,.14)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2.5px)", gap: "2.5px", flex: "none", opacity: 0.3 }}>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+          </div>
+          <input
+            value={titleDraft}
+            autoFocus
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveSubtask();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            placeholder="Subtask title"
+            style={{
+              flex: 1,
+              border: "1.5px solid #16130F",
+              background: "#ffffff",
+              padding: "5px 7px",
+              fontFamily: "var(--sans)",
+              fontSize: "15px",
+              color: "#16130F",
+              outline: "none"
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            value={detailDraft}
+            onChange={(e) => setDetailDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveSubtask();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            placeholder="Add details / description..."
+            style={{
+              flex: 1,
+              border: "1.5px solid #16130F",
+              background: "#ffffff",
+              padding: "5px 7px",
+              fontFamily: "var(--mono)",
+              fontSize: "10px",
+              color: "#16130F",
+              outline: "none"
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => void saveSubtask()}
+            title="Save"
+            style={{
+              flex: "none",
+              border: "1.5px solid #16130F",
+              background: "#8BD4F0",
+              padding: "5px 9px",
+              fontFamily: "var(--mono)",
+              fontSize: "9.5px",
+              fontWeight: 600,
+              letterSpacing: ".08em",
+              cursor: "pointer",
+              color: "#16130F"
+            }}
+          >
+            SAVE
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData("application/dash-subtask", JSON.stringify({ ticketId: ticket.id, subtask }));
+        event.dataTransfer.setData("text/plain", `subtask:${ticket.id}:${subtask}`);
+      }}
+      onDoubleClick={() => setEditing(true)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        background: "#FBFBF8",
+        border: "1.5px solid #16130F",
+        padding: "8px 10px",
+        boxShadow: "2px 2px 0 rgba(20,17,12,.14)",
+        cursor: "grab",
+        userSelect: "none"
+      }}
+      title={details ? `Description: ${details}` : "Drag to focus · double-click to edit"}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2.5px)", gap: "2.5px", flex: "none", cursor: "grab" }}>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+      </div>
+      <span style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {subtask}
+      </span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        draggable={false}
+        title="Edit subtask"
+        style={{
+          flex: "none",
+          border: "1px solid #16130F",
+          background: "#ffffff",
+          width: 20,
+          height: 20,
+          lineHeight: 1,
+          fontSize: 10,
+          cursor: "pointer",
+          color: "#16130F",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        ✎
+      </button>
+      {!compact && (
+        <span
+          onClick={() => void onMoveSubtask(ticket.id, subtask, "now")}
+          title="Drag to focus · double-click to edit"
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: "13px",
+            color: "#c0bdb2",
+            flex: "none",
+            cursor: "pointer",
+            userSelect: "none"
+          }}
+        >
+          ↑
+        </span>
+      )}
+    </div>
+  );
+}
+
+function NowSubtaskCard({
+  ticket,
+  subtask,
+  onMoveSubtask,
+  onDeleteSubtask,
+}: {
+  ticket: TicketRow;
+  subtask: string;
+  onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
+  onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
+}) {
+  const detailsMap = ticketSubtaskDetails(ticket);
+  const details = detailsMap[subtask]?.details;
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", background: "#ffffff", border: "1.5px solid #16130F", boxShadow: "3px 3px 0 rgba(20,17,12,.13)" }}>
+      <div style={{ width: 6, alignSelf: "stretch", flex: "none", background: "#F3E15E" }}></div>
+      <div style={{ flex: 1, padding: "12px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 11, letterSpacing: ".1em", background: "#16130F", color: "#ffffff", padding: "3px 5px" }}>
+              SUBTASK
+            </span>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#8a877d", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {ticket.title}
+            </span>
+          </div>
+          <div style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: 15, color: "#16130F", marginTop: 6 }}>
+            {subtask}
+          </div>
+          {details && (
+            <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #cfccc2", fontFamily: "var(--mono)", fontSize: 11, color: "#5a574e", lineHeight: 1.4 }}>
+              {details}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => void onMoveSubtask(ticket.id, subtask, "backlog")}
+          style={{
+            flex: "none",
+            width: 27,
+            height: 27,
+            border: "1.5px solid #16130F",
+            background: "#ffffff",
+            cursor: "pointer",
+            fontSize: 15,
+            color: "#16130F",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0
+          }}
+          title="Send back to its ticket"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TicketCard({
+  ticket,
+  placement = "saved",
+  index = 0,
+  onMove,
+  onEdit,
+  onAddSubtask,
+  onMoveSubtask,
+  onUpdateSubtask,
+  onDeleteSubtask,
+  onDelete,
+}: {
+  ticket: TicketRow;
+  placement?: "saved" | "now";
+  index?: number;
+  onMove: (id: string, status: "backlog" | "now") => void;
+  onEdit: (id: string, title: string) => Promise<void>;
+  onAddSubtask: (id: string, subtask: string) => Promise<void>;
+  onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
+  onUpdateSubtask: (id: string, oldSubtask: string, nextSubtask: string, details: string) => Promise<void>;
+  onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(ticket.title);
+  const [newSubtask, setNewSubtask] = useState("");
+  const [busy, setBusy] = useState(false);
+  const visibleSubtasks = ticket.subtasks.filter((subtask) => subtaskStatus(ticket, subtask) === "backlog");
+
+  const accent = index % 2 === 0 ? "#8BD4F0" : "#F3E15E";
+
+  const saveTitle = async () => {
+    if (!title.trim()) return;
+    setBusy(true);
+    try {
+      await onEdit(ticket.id, title.trim());
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addSubtask = async () => {
+    const nextSubtask = titleCaseText(newSubtask);
+    if (!nextSubtask) return;
+    setBusy(true);
+    try {
+      await onAddSubtask(ticket.id, nextSubtask);
+      setNewSubtask("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <article
+      className={`saved-ticket-card ${placement === "now" ? "now-ticket-card" : ""}`.trim()}
+      draggable={placement === "saved"}
+      onDragStart={(event) => event.dataTransfer.setData("text/plain", ticket.id)}
+    >
+      <div
+        className="ticket-title-strip"
+        onDoubleClick={() => setEditing(true)}
+        style={{
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+          background: accent
+        }}
+      >
+        <div className="saved-ticket-header-copy">
+          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+            {ticket.title}
+          </span>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0 }}>
+            {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="saved-ticket-close"
+          onClick={() => void onDelete(ticket.id)}
+          title="Delete ticket"
+          aria-label={`Delete ticket ${ticket.title}`}
+        >
+          ×
+        </button>
+      </div>
+      {editing ? (
+        <div className="saved-ticket-edit" style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void saveTitle();
+              if (event.key === "Escape") {
+                setTitle(ticket.title);
+                setEditing(false);
+              }
+            }}
+            autoFocus
+            style={{ width: "100%", border: "1.5px solid #16130F", background: "#ffffff", padding: "6px 7px", fontSize: 13 }}
+          />
+          <div style={{ display: "flex", gap: 5 }}>
+            <button type="button" className="ticket-move-button mono" disabled={busy || !title.trim()} onClick={() => void saveTitle()}>
+              Save
+            </button>
+            <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => { setTitle(ticket.title); setEditing(false); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className="saved-ticket-subtasks" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        {visibleSubtasks.length === 0 ? (
+          <div style={{ padding: 14, textAlign: "center", fontFamily: "var(--mono)", fontSize: 12, letterSpacing: ".1em", color: "#9a978d", border: "1.5px dashed #cfccc2" }}>
+            ALL IN FOCUS ✓
+          </div>
+        ) : (
+          visibleSubtasks.map((subtask) => (
+            <SubtaskMiniCard
+              key={subtask}
+              ticket={ticket}
+              subtask={subtask}
+              compact={placement === "now"}
+              onMoveSubtask={onMoveSubtask}
+              onUpdateSubtask={onUpdateSubtask}
+              onDeleteSubtask={onDeleteSubtask}
+            />
+          ))
+        )}
+        {placement === "saved" && (
+          <input
+            value={newSubtask}
+            onChange={(event) => setNewSubtask(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void addSubtask();
+              }
+            }}
+            placeholder="+ ADD SUBTASK"
+            style={{
+              width: "100%",
+              border: "1.5px dashed #b4b1a7",
+              background: "transparent",
+              padding: "8px 10px",
+              fontFamily: "var(--mono)",
+              fontSize: 12,
+              letterSpacing: ".1em",
+              textTransform: "uppercase",
+              color: "#7a776e",
+              outline: "none",
+              marginTop: 2
+            }}
+          />
+        )}
+      </div>
+      {placement !== "saved" && (
+        <>
+          <div className="saved-ticket-add-subtask">
+            <input
+              value={newSubtask}
+              onChange={(event) => setNewSubtask(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void addSubtask();
+              }}
+              placeholder="Add subtask"
+            />
+            <button
+              type="button"
+              className="ticket-move-button mono"
+              disabled={busy || !newSubtask.trim()}
+              onClick={() => void addSubtask()}
+            >
+              Add
+            </button>
+          </div>
+          <div className="saved-ticket-footer">
+            <MiniPill tone="#ffffff">{ticket.status}</MiniPill>
+            <div className="saved-ticket-actions">
+              <button
+                type="button"
+                className="ticket-move-button mono"
+                onClick={() => onMove(ticket.id, ticket.status === "now" ? "backlog" : "now")}
+              >
+                {ticket.status === "now" ? "Backlog" : "To now"}
+              </button>
+              <button type="button" className="ticket-move-button mono" onClick={() => setEditing(true)}>
+                Edit
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </article>
+  );
 }
 
 export function CockpitPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [newProblem, setNewProblem] = useState("");
-  const [newCardTitle, setNewCardTitle] = useState("");
-  const [newIdeaText, setNewIdeaText] = useState("");
-  const [cards, setCards] = useState<CockpitPostcard[]>([]);
-  const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [ideaPositions, setIdeaPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [ideasVisible, setIdeasVisible] = useState(false);
-  const [problemsVisible, setProblemsVisible] = useState(false);
-  const [ideasLoading, setIdeasLoading] = useState(false);
-  const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
-  const [editingIdeaText, setEditingIdeaText] = useState("");
-  const [cardsLoaded, setCardsLoaded] = useState(false);
-  const [systemPositions, setSystemPositions] = useState<SystemPostcardPositions>(createDefaultSystemPostcardPositions);
-  const [systemPositionsLoaded, setSystemPositionsLoaded] = useState(false);
-  const [dragState, setDragState] = useState<{
-    id: string;
-    kind: "user" | "system" | "idea";
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-    itemWidth: number;
-    itemHeight: number;
-  } | null>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
+  const [ticketText, setTicketText] = useState("@Codex build GitHub by tomorrow. Very important. Subtasks: clean profile, pin Dash, write README, add capstone repo.");
+  const [selectedAgent, setSelectedAgent] = useState<CockpitAgent | null>(null);
+  const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketError, setTicketError] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [serverDraft, setServerDraft] = useState<CockpitTicketDraft | null>(null);
   const data = useDashData(undefined, refreshTrigger, { includeQuotes: false, includeWorkouts: true });
 
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("dash_cockpit_postcards_v1");
-      const parsed = saved ? JSON.parse(saved) as CockpitPostcard[] : null;
-      setCards(Array.isArray(parsed) && parsed.length > 0 ? parsed : createDefaultCockpitCards());
-    } catch {
-      setCards(createDefaultCockpitCards());
-    } finally {
-      setCardsLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      const savedPositions = window.localStorage.getItem("dash_cockpit_ideas_v1");
-      const savedVisibility = window.localStorage.getItem("dash_cockpit_ideas_visible_v1");
-      const savedProblemsVisibility = window.localStorage.getItem("dash_cockpit_problems_visible_v1");
-      setIdeaPositions(savedPositions ? JSON.parse(savedPositions) : {});
-      setIdeasVisible(savedVisibility === "true");
-      setProblemsVisible(savedProblemsVisibility === "true");
-    } catch {
-      setIdeaPositions({});
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("dash_cockpit_system_postcards_v1");
-      const parsed = saved ? JSON.parse(saved) as Partial<SystemPostcardPositions> : null;
-      setSystemPositions({ ...createDefaultSystemPostcardPositions(), ...parsed });
-    } catch {
-      setSystemPositions(createDefaultSystemPostcardPositions());
-    } finally {
-      setSystemPositionsLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!cardsLoaded) return;
-    window.localStorage.setItem("dash_cockpit_postcards_v1", JSON.stringify(cards));
-  }, [cards, cardsLoaded]);
-
-  useEffect(() => {
-    if (!systemPositionsLoaded) return;
-    window.localStorage.setItem("dash_cockpit_system_postcards_v1", JSON.stringify(systemPositions));
-  }, [systemPositions, systemPositionsLoaded]);
-
-  useEffect(() => {
-    window.localStorage.setItem("dash_cockpit_ideas_v1", JSON.stringify(ideaPositions));
-  }, [ideaPositions]);
-
-  useEffect(() => {
-    window.localStorage.setItem("dash_cockpit_ideas_visible_v1", String(ideasVisible));
-  }, [ideasVisible]);
-
-  useEffect(() => {
-    window.localStorage.setItem("dash_cockpit_problems_visible_v1", String(problemsVisible));
-  }, [problemsVisible]);
-
-  const loadIdeas = useCallback(async () => {
-    setIdeasLoading(true);
-    try {
-      const response = await fetch("/api/ideas?all=true");
-      const payload = await response.json();
-      setIdeas(((payload.ideas ?? []) as Idea[]).filter((idea) => !idea.archived));
-    } finally {
-      setIdeasLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (ideasVisible) void loadIdeas();
-  }, [ideasVisible, loadIdeas]);
-
-  const solveProblem = useCallback(async (id: string) => {
-    await fetch(`/api/problems/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ solved: true }),
-    });
-    setRefreshTrigger((prev) => prev + 1);
-  }, []);
-
-  const addProblem = useCallback(async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (!newProblem.trim()) return;
-    await fetch("/api/problems", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: newProblem.trim() }),
-    });
-    setNewProblem("");
-    setRefreshTrigger((prev) => prev + 1);
-  }, [newProblem]);
-
-  const addIdea = useCallback(async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (!newIdeaText.trim()) return;
-    const response = await fetch("/api/ideas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: newIdeaText.trim() }),
-    });
-    if (response.ok) {
-      setNewIdeaText("");
-      await loadIdeas();
-    }
-  }, [loadIdeas, newIdeaText]);
-
-  const archiveIdea = useCallback(async (id: string) => {
-    const response = await fetch(`/api/ideas/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archived: true }),
-    });
-    if (response.ok) setIdeas((current) => current.filter((idea) => idea.id !== id));
-  }, []);
-
-  const deleteIdea = useCallback(async (id: string) => {
-    const response = await fetch(`/api/ideas/${id}`, { method: "DELETE" });
-    if (response.ok) setIdeas((current) => current.filter((idea) => idea.id !== id));
-  }, []);
-
-  const saveIdea = useCallback(async (id: string) => {
-    if (!editingIdeaText.trim()) return;
-    const response = await fetch(`/api/ideas/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: editingIdeaText.trim() }),
-    });
-    if (response.ok) {
-      setIdeas((current) => current.map((idea) => idea.id === id ? { ...idea, text: editingIdeaText.trim() } : idea));
-      setEditingIdeaId(null);
-      setEditingIdeaText("");
-    }
-  }, [editingIdeaText]);
-
-  const createCard = useCallback((e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (!newCardTitle.trim()) return;
-    const offset = cards.length % 5;
-    const card: CockpitPostcard = {
-      id: Math.random().toString(36).slice(2, 10),
-      title: newCardTitle.trim(),
-      x: 42 + offset * 38,
-      y: 360 + offset * 28,
-      items: [],
+  const localDraft = useMemo(() => parseCockpitTicket(ticketText, selectedAgent), [selectedAgent, ticketText]);
+  const draft = useMemo<CockpitTicketDraft>(() => {
+    if (!serverDraft) return localDraft;
+    return {
+      title: serverDraft.title || localDraft.title,
+      dueDate: serverDraft.dueDate || localDraft.dueDate,
+      dueAt: serverDraft.dueAt || localDraft.dueAt,
+      importance: serverDraft.importance || localDraft.importance,
+      subtasks: serverDraft.subtasks.length ? serverDraft.subtasks : localDraft.subtasks,
+      agent: serverDraft.agent ?? localDraft.agent,
     };
-    setCards((current) => [...current, card]);
-    setNewCardTitle("");
-  }, [cards.length, newCardTitle]);
+  }, [localDraft, serverDraft]);
 
-  const addCardItem = useCallback((cardId: string, text: string) => {
-    if (!text.trim()) return;
-    setCards((current) => current.map((card) => (
-      card.id === cardId
-        ? { ...card, items: [...card.items, { id: Math.random().toString(36).slice(2, 10), text: text.trim(), done: false }] }
-        : card
-    )));
-  }, []);
-
-  const toggleCardItem = useCallback((cardId: string, itemId: string) => {
-    setCards((current) => current.map((card) => (
-      card.id === cardId
-        ? { ...card, items: card.items.map((item) => item.id === itemId ? { ...item, done: !item.done } : item) }
-        : card
-    )));
-  }, []);
-
-  const deleteCardItem = useCallback((cardId: string, itemId: string) => {
-    setCards((current) => current.map((card) => (
-      card.id === cardId
-        ? { ...card, items: card.items.filter((item) => item.id !== itemId) }
-        : card
-    )));
-  }, []);
-
-  const deleteCard = useCallback((cardId: string) => {
-    setCards((current) => current.filter((card) => card.id !== cardId));
-  }, []);
-
-  const startDrag = useCallback((
-    item: { id: string; x: number; y: number },
-    kind: "user" | "system" | "idea",
-    event: ReactPointerEvent<HTMLDivElement>
-  ) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button, input, textarea, a")) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const cardElement = event.currentTarget.closest<HTMLElement>(".idea-note, .grid-card");
-    const cardRect = cardElement?.getBoundingClientRect();
-    setDragState({
-      id: item.id,
-      kind,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: item.x,
-      originY: item.y,
-      itemWidth: (cardRect?.width ?? (kind === "idea" ? 220 : 292)) + 12,
-      itemHeight: (cardRect?.height ?? (kind === "idea" ? 112 : 220)) + 36,
-    });
-  }, []);
-
-  const moveDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragState || !boardRef.current) return;
-    const rect = boardRef.current.getBoundingClientRect();
-    const nextX = Math.max(12, Math.min(rect.width - dragState.itemWidth, dragState.originX + event.clientX - dragState.startX));
-    const nextY = Math.max(12, Math.min(rect.height - dragState.itemHeight, dragState.originY + event.clientY - dragState.startY));
-    if (dragState.kind === "system") {
-      const systemId = dragState.id as SystemPostcardId;
-      setSystemPositions((current) => ({
-        ...current,
-        [systemId]: { x: nextX, y: nextY },
-      }));
-      return;
+  const loadTickets = useCallback(async () => {
+    setTicketsLoading(true);
+    setTicketError("");
+    try {
+      const response = await fetch("/api/tickets");
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Could not load tickets");
+      setTickets((payload.tickets ?? []) as TicketRow[]);
+    } catch (error) {
+      setTicketError(error instanceof Error ? error.message : "Could not load tickets");
+    } finally {
+      setTicketsLoading(false);
     }
-
-    if (dragState.kind === "idea") {
-      setIdeaPositions((current) => ({
-        ...current,
-        [dragState.id]: { x: nextX, y: nextY },
-      }));
-      return;
-    }
-
-    setCards((current) => current.map((card) => card.id === dragState.id ? { ...card, x: nextX, y: nextY } : card));
-  }, [dragState]);
-
-  const endDrag = useCallback(() => {
-    setDragState(null);
   }, []);
+
+  useEffect(() => {
+    void loadTickets();
+  }, [loadTickets, refreshTrigger]);
+
+  useEffect(() => {
+    setServerDraft(null);
+    if (!ticketText.trim()) return;
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/tickets/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: ticketText, selectedAgent }),
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!controller.signal.aborted && payload.draft) {
+          setServerDraft(payload.draft as CockpitTicketDraft);
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setServerDraft(null);
+        }
+      }
+    }, 650);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [selectedAgent, ticketText]);
 
   if (!data) return <LoadingPage />;
 
-  const activeTask = data.TASKS.find(t => !t.done);
-  const activeProblems = data.PROBLEMS.filter(p => !p.solved);
-  const upcomingEvent = [...data.BLOCKS]
-    .filter((block) => block.kind === "cal" && toMinutes(block.end) >= data.NOW_MIN)
-    .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))[0];
-  const spendByCategory = data.SPEND.reduce<Record<string, number>>((totals, item) => {
-    totals[item.cat] = (totals[item.cat] ?? 0) + item.amount;
-    return totals;
-  }, {});
-  const topSpendCategory = Object.entries(spendByCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "No spending logged";
+  const activeTask = data.TASKS.find((task) => !task.done);
+  const nowTickets = tickets.filter((ticket) => ticket.status === "now");
+  const backlogTickets = tickets.filter((ticket) => ticket.status === "backlog");
+  const nowSubtasks = tickets.flatMap((ticket) => (
+    ticket.subtasks
+      .filter((subtask) => subtaskStatus(ticket, subtask) === "now")
+      .map((subtask) => ({ ticket, subtask }))
+  ));
+
+  const selectAgent = (agent: CockpitAgent | null) => {
+    setSelectedAgent(agent);
+    const nextText = ticketText.replace(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)\s*/ig, "").trim();
+    setTicketText(agent ? `@${AGENT_LABELS[agent]} ${nextText}`.trim() : nextText);
+  };
+
+  const moveTicket = async (id: string, status: "backlog" | "now") => {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => {
+      if (status === "now" && ticket.status === "now" && ticket.id !== id) {
+        return { ...ticket, status: "backlog", sort_order: 0 };
+      }
+      return ticket.id === id ? { ...ticket, status, sort_order: status === "now" ? 1 : 0 } : ticket;
+    }));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status, sort_order: status === "now" ? 1 : 0 }),
+      });
+      if (!response.ok) throw new Error("Could not move ticket");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+    }
+  };
+
+  const editTicket = async (id: string, title: string) => {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, title } : ticket));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title }),
+      });
+      if (!response.ok) throw new Error("Could not edit ticket");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+      throw new Error("Could not edit ticket");
+    }
+  };
+
+  const addTicketSubtask = async (id: string, subtask: string) => {
+    const previous = tickets;
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target) return;
+    const subtasks = [...target.subtasks, subtask];
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, subtasks } : ticket));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, subtasks }),
+      });
+      if (!response.ok) throw new Error("Could not add subtask");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+      throw new Error("Could not add subtask");
+    }
+  };
+
+  const updateTicketSubtaskDetails = async (id: string, subtaskDetails: TicketSubtaskDetails) => {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, subtask_details: subtaskDetails } : ticket));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, subtask_details: subtaskDetails }),
+      });
+      if (!response.ok) throw new Error("Could not update subtask details");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+      throw new Error("Could not update subtask details");
+    }
+  };
+
+  const updateTicketSubtasks = async (id: string, subtasks: string[], subtaskDetails: TicketSubtaskDetails) => {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, subtasks, subtask_details: subtaskDetails } : ticket));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, subtasks, subtask_details: subtaskDetails }),
+      });
+      if (!response.ok) throw new Error("Could not update subtasks");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+      throw new Error("Could not update subtasks");
+    }
+  };
+
+  const moveTicketSubtask = async (id: string, subtask: string, status: "backlog" | "now") => {
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target || !target.subtasks.includes(subtask)) return;
+    const details = ticketSubtaskDetails(target);
+    await updateTicketSubtaskDetails(id, {
+      ...details,
+      [subtask]: { ...details[subtask], status },
+    });
+  };
+
+  const editTicketSubtask = async (id: string, oldSubtask: string, nextSubtask: string, details: string) => {
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target) return;
+    const cleanTitle = titleCaseText(nextSubtask);
+    if (!cleanTitle) return;
+    const currentDetails = ticketSubtaskDetails(target);
+    const renamedDetails = { ...currentDetails };
+    const existing = renamedDetails[oldSubtask] ?? {};
+    delete renamedDetails[oldSubtask];
+    renamedDetails[cleanTitle] = { ...existing, details: details.trim() };
+    const subtasks = target.subtasks.map((subtask) => subtask === oldSubtask ? cleanTitle : subtask);
+    await updateTicketSubtasks(id, subtasks, renamedDetails);
+  };
+
+  const deleteTicketSubtask = async (id: string, subtask: string) => {
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target) return;
+    const details = { ...ticketSubtaskDetails(target) };
+    delete details[subtask];
+    await updateTicketSubtasks(id, target.subtasks.filter((item) => item !== subtask), details);
+  };
+
+  const deleteTicket = async (id: string) => {
+    const previous = tickets;
+    setTickets((current) => current.filter((ticket) => ticket.id !== id));
+    try {
+      const response = await fetch(`/api/tickets?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Could not delete ticket");
+      setRefreshTrigger((current) => current + 1);
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+    }
+  };
+
+  const persistTicket = async (withAgent: boolean) => {
+    if (!ticketText.trim() && !draft.title) return;
+    setSaveState("saving");
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: draft.title,
+          due_at: draft.dueAt,
+          due_label: draft.dueDate,
+          importance: draft.importance,
+          subtasks: draft.subtasks,
+          subtask_details: {},
+          agent: withAgent ? draft.agent ?? null : null,
+          source_text: ticketText,
+        }),
+      });
+      if (!response.ok) throw new Error("Ticket save failed");
+      setRefreshTrigger((current) => current + 1);
+      setSaveState("saved");
+      void loadTickets();
+    } catch {
+      setSaveState("error");
+    }
+  };
+
+  const canSave = Boolean(ticketText.trim() || draft.title);
 
   return (
-    <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="cockpit-page">
       <PageHeader active="cockpit" data={data} />
 
-      <main className="cockpit-layout">
-        <section className="today-strip" aria-label="Today at a glance">
-          <TodayTile
-            href="/tasks"
-            label="Next task"
-            value={activeTask?.title ?? "All clear"}
-            detail={activeTask ? `${activeTask.weight} · due ${activeTask.due || "today"}` : "Nothing waiting"}
-          />
-          <TodayTile
-            href="/calendar"
-            label="Next event"
-            value={upcomingEvent?.label ?? "Free"}
-            detail={upcomingEvent ? `${upcomingEvent.start}–${upcomingEvent.end}` : "No upcoming event"}
-          />
-          <TodayTile
-            href="/food"
-            label="Food"
-            value={data.MEALS.length ? `${data.VITALS.kcal.today} kcal · ${data.VITALS.protein.today}g` : "Not logged"}
-            detail={`${data.VITALS.kcal.target} kcal · ${data.VITALS.protein.target}g target`}
-            progress={(data.VITALS.kcal.today / data.VITALS.kcal.target) * 100}
-          />
-          <TodayTile
-            href="/food"
-            label="Spending"
-            value={formatINR(data.VITALS.spend.today, 0)}
-            detail={data.SPEND.length ? `${topSpendCategory} · ${formatINR(data.VITALS.spend.target, 0)} target` : `${formatINR(0, 0)} today`}
-            progress={(data.VITALS.spend.today / data.VITALS.spend.target) * 100}
-          />
-          <TodayTile
-            href="/workouts"
-            label="Workout"
-            value={data.WORKOUT_SUMMARY.label}
-            detail={data.WORKOUT_SUMMARY.sessions ? `${data.WORKOUT_SUMMARY.exercises} exercises · ${data.WORKOUT_SUMMARY.sets} sets` : "Recovery is training too"}
-          />
-        </section>
+      <main className="cockpit-demo-shell">
+        <div className="cockpit-demo-grid">
+          <CockpitCard eyebrow="↳ NOW · FOCUS 02" tone={COCKPIT_BLUE} className="cockpit-now-card cockpit-primary-card">
+            <div className="now-scroll-list">
+              {nowSubtasks.map(({ ticket, subtask }) => (
+                <NowSubtaskCard
+                  key={`${ticket.id}:${subtask}`}
+                  ticket={ticket}
+                  subtask={subtask}
+                  onMoveSubtask={moveTicketSubtask}
+                  onDeleteSubtask={deleteTicketSubtask}
+                />
+              ))}
 
-        <div className="cockpit-workspace">
-        <div className="cockpit-toolbar">
-          <form onSubmit={createCard} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 280, flex: "1 1 360px" }}>
-            <input
-              className="clean-input"
-              value={newCardTitle}
-              onChange={(e) => setNewCardTitle(e.target.value)}
-              placeholder="New postcard..."
-              style={{ flex: 1, minWidth: 0, height: 38, padding: "0 12px", fontSize: 12 }}
-            />
-            <button className="clean-button primary" type="submit" disabled={!newCardTitle.trim()} title="Add postcard">
-              <Plus size={14} /> Add
-            </button>
-          </form>
-
-          {ideasVisible && (
-            <form onSubmit={addIdea} style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 300px" }}>
-              <input
-                className="clean-input"
-                value={newIdeaText}
-                onChange={(e) => setNewIdeaText(e.target.value)}
-                placeholder="Add an idea..."
-                style={{ flex: 1, minWidth: 0, height: 38, padding: "0 12px", fontSize: 12 }}
-              />
-              <button className="clean-button" type="submit" disabled={!newIdeaText.trim()}>Save</button>
-            </form>
-          )}
-
-          <button type="button" className={`clean-button ${ideasVisible ? "active" : ""}`} onClick={() => setIdeasVisible((visible) => !visible)}>
-            <Lightbulb size={14} /> Ideas {ideasLoading ? "…" : ideasVisible ? ideas.length : ""}
-          </button>
-          <button type="button" className={`clean-button ${problemsVisible ? "active" : ""}`} onClick={() => setProblemsVisible((visible) => !visible)}>
-            Problems {activeProblems.length}
-          </button>
-        </div>
-
-        <div
-          ref={boardRef}
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          style={{
-            position: "relative",
-            flex: 1,
-            minHeight: 0,
-            overflow: "auto",
-            border: "2px solid #000000",
-            backgroundImage: "radial-gradient(rgba(12, 12, 14, 0.12) 1px, transparent 1px)",
-            backgroundSize: "28px 28px",
-            backgroundColor: "rgba(252, 251, 247, 0.32)",
-          }}
-        >
-          <div style={{ position: "relative", minWidth: 1120, minHeight: 760 }}>
-            {problemsVisible && <CockpitPostcardShell
-              title="Problem space"
-              eyebrow="open loops"
-              x={systemPositions.problems.x}
-              y={systemPositions.problems.y}
-              count={`${activeProblems.length} items`}
-              onPointerDown={(event) => startDrag({ id: "problems", ...systemPositions.problems }, "system", event)}
-            >
-              <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#ffffff" }}>
-                <div style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  flex: 1,
-                  padding: "10px 12px 12px",
-                }}>
-                  {activeProblems.length === 0 ? (
-                    <div className="mono" style={{ fontSize: 10, color: "var(--muted)", padding: "22px 0", textAlign: "center" }}>
-                      all problems solved
-                    </div>
-                  ) : (
-                    activeProblems.map((problem) => (
-                      <div key={problem.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, borderBottom: "1px solid rgba(12, 12, 14, 0.08)", fontSize: 13, lineHeight: 1.25 }}>
-                        <button
-                          onClick={() => solveProblem(problem.id)}
-                          title="Mark solved"
-                          style={{ width: 16, height: 16, border: "1px solid var(--line-strong)", borderRadius: 4, background: "transparent", cursor: "pointer", flexShrink: 0, padding: 0 }}
-                        />
-                        <span>{problem.text}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <form onSubmit={addProblem} style={{ borderTop: "1px solid rgba(12, 12, 14, 0.18)", background: "#ffffff" }}>
-                  <input
-                    value={newProblem}
-                    onChange={(e) => setNewProblem(e.target.value)}
-                    placeholder="+ Add problem..."
-                    style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
-                  />
-                </form>
-              </div>
-            </CockpitPostcardShell>}
-
-            {cards.map((card) => (
-              <CockpitPostcardShell
-                key={card.id}
-                title={card.title}
-                eyebrow="postcard"
-                x={card.x}
-                y={card.y}
-                count={`${card.items.filter((item) => !item.done).length} open`}
-                onPointerDown={(event) => startDrag(card, "user", event)}
+              <div
+                className="now-drop-zone"
+                aria-label="Drop ticket or subtask into now"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  const subtaskPayload = event.dataTransfer.getData("application/dash-subtask");
+                  if (subtaskPayload) {
+                    try {
+                      const payload = JSON.parse(subtaskPayload) as { ticketId?: string; subtask?: string };
+                      if (payload.ticketId && payload.subtask) void moveTicketSubtask(payload.ticketId, payload.subtask, "now");
+                    } catch {
+                      // Ignore malformed drag payloads from outside the cockpit.
+                    }
+                    return;
+                  }
+                  const id = event.dataTransfer.getData("text/plain");
+                  if (id && !id.startsWith("subtask:")) void moveTicket(id, "now");
+                }}
               >
-                <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#ffffff" }}>
-                  <div style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    flex: 1,
-                    minHeight: 130,
-                    padding: "10px 12px 12px",
-                  }}>
-                    {card.items.length === 0 ? (
-                      <div className="mono" style={{ fontSize: 10, color: "#888", textAlign: "center", padding: "20px 0" }}>
-                        Add what belongs here.
-                      </div>
-                    ) : (
-                      card.items.map((item) => (
-                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30, borderBottom: "1px solid rgba(12, 12, 14, 0.08)" }}>
-                          <button
-                            type="button"
-                            onClick={() => toggleCardItem(card.id, item.id)}
-                            style={{
-                              width: 16,
-                              height: 16,
-                              border: "1px solid var(--line-strong)",
-                              borderRadius: 4,
-                              background: item.done ? "#ffedd5" : "transparent",
-                              cursor: "pointer",
-                              display: "grid",
-                              placeItems: "center",
-                              padding: 0,
-                              flexShrink: 0,
-                            }}
-                          >
-                            {item.done && <Check size={9} />}
-                          </button>
-                          <span style={{ flex: 1, fontSize: 13, lineHeight: 1.2, textDecoration: item.done ? "line-through" : "none", color: item.done ? "#777770" : "inherit" }}>
-                            {item.text}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => deleteCardItem(card.id, item.id)}
-                            title="Delete item"
-                            style={{ border: "none", background: "transparent", color: "#b24444", cursor: "pointer", padding: 2 }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", borderTop: "1px solid rgba(12, 12, 14, 0.18)", background: "#ffffff" }}>
-                    <input
-                      placeholder="+ Add item..."
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          addCardItem(card.id, event.currentTarget.value);
-                          event.currentTarget.value = "";
-                        }
-                      }}
-                      style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => deleteCard(card.id)}
-                      title="Delete postcard"
-                      style={{ border: "none", background: "#ffffff", color: "#b24444", padding: "0 12px", cursor: "pointer" }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </CockpitPostcardShell>
-            ))}
+                ↓ DRAG A SUBTASK HERE TO FOCUS
+              </div>
+            </div>
+          </CockpitCard>
 
-            {ideasVisible && ideas.map((idea, index) => {
-              const column = index % 4;
-              const precedingColumnIdeas = ideas.filter((_, precedingIndex) => (
-                precedingIndex < index && precedingIndex % 4 === column
-              ));
-              const position = ideaPositions[idea.id] ?? {
-                x: 42 + column * 240,
-                y: 420 + precedingColumnIdeas.reduce(
-                  (offset, precedingIdea) => offset + estimatedIdeaNoteHeight(precedingIdea.text) + 14,
-                  0
-                ),
-              };
-              return (
-                <div
-                  key={idea.id}
-                  className="idea-note"
-                  style={{ left: position.x, top: position.y }}
-                >
-                  <div
-                    className="idea-note-header"
-                    onPointerDown={(event) => startDrag({ id: idea.id, ...position }, "idea", event)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 960, width: "100%" }}>
+            <CockpitCard eyebrow="↳ CREATE TICKET 03" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card" headerMeta="BRAIN-DUMP · WE PARSE IT">
+              <div className="ticket-compose-stack">
+                <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
+
+                <textarea
+                  value={ticketText}
+                  onChange={(event) => {
+                    setTicketText(event.target.value);
+                    setSaveState("idle");
+                  }}
+                  className="ticket-composer"
+                  aria-label="Ticket composer"
+                />
+
+                <RequiredFieldChips draft={draft} />
+
+                <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="cockpit-action-button mono"
+                    disabled={!canSave || !draft.agent || saveState === "saving"}
+                    onClick={() => void persistTicket(true)}
                   >
-                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 900, textTransform: "uppercase" }}>↳ {idea.category || "idea"}</span>
-                    <GripVertical size={12} />
-                  </div>
-                  <div className="idea-note-body">
-                    {editingIdeaId === idea.id ? (
-                      <textarea
-                        autoFocus
-                        className="clean-input"
-                        value={editingIdeaText}
-                        onChange={(event) => setEditingIdeaText(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" && !event.shiftKey) {
-                            event.preventDefault();
-                            void saveIdea(idea.id);
-                          }
-                          if (event.key === "Escape") setEditingIdeaId(null);
-                        }}
-                        style={{ width: "100%", minHeight: 60, padding: 7, resize: "none", fontSize: 12, lineHeight: 1.4 }}
-                      />
-                    ) : (
-                      <p className="idea-note-text" title={idea.text}>{idea.text}</p>
-                    )}
-                  </div>
-                  <div className="idea-note-footer">
-                    <button type="button" title="Edit idea" onClick={() => { setEditingIdeaId(idea.id); setEditingIdeaText(idea.text); }} style={{ border: 0, background: "transparent", padding: 4, cursor: "pointer", color: "var(--muted)" }}>
-                      <Pencil size={12} />
-                    </button>
-                    <button type="button" title="Archive idea" onClick={() => void archiveIdea(idea.id)} style={{ border: 0, background: "transparent", padding: 4, cursor: "pointer", color: "var(--muted)" }}>
-                      <Archive size={12} />
-                    </button>
-                    <button type="button" title="Delete idea" onClick={() => void deleteIdea(idea.id)} style={{ border: 0, background: "transparent", padding: 4, cursor: "pointer", color: "var(--rose)" }}>
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                    {saveState === "saving" ? "Saving..." : "Create ticket + start agent"}
+                  </button>
+                  <button
+                    type="button"
+                    className="cockpit-action-button secondary mono"
+                    disabled={!canSave || saveState === "saving"}
+                    onClick={() => void persistTicket(false)}
+                  >
+                    {saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Save ticket only"}
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            </CockpitCard>
+
+            <CockpitCard eyebrow="↳ TICKET BOARD 04" tone={COCKPIT_BLUE} className="saved-tickets-board" headerMeta="⠿ DRAG SUBTASKS → FOCUS RAIL">
+              <div className="saved-ticket-header" style={{ display: "none" }}>
+                <div>
+                  <h1 className="cockpit-card-title">Ticket board</h1>
+                </div>
+                <MiniPill tone="#ffffff">{ticketsLoading ? "loading" : `${backlogTickets.length} saved`}</MiniPill>
+              </div>
+              {ticketError ? (
+                <div className="saved-ticket-empty">{ticketError}</div>
+              ) : backlogTickets.length === 0 ? (
+                <div className="saved-ticket-empty">No saved tickets yet.</div>
+              ) : (
+                <div className="saved-ticket-grid">
+                  {backlogTickets.map((ticket, idx) => (
+                    <TicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      index={idx}
+                      onMove={moveTicket}
+                      onEdit={editTicket}
+                      onAddSubtask={addTicketSubtask}
+                      onMoveSubtask={moveTicketSubtask}
+                      onUpdateSubtask={editTicketSubtask}
+                      onDeleteSubtask={deleteTicketSubtask}
+                      onDelete={deleteTicket}
+                    />
+                  ))}
+                </div>
+              )}
+            </CockpitCard>
           </div>
-        </div>
         </div>
       </main>
     </div>
