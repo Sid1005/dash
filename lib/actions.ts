@@ -1,7 +1,6 @@
 import { type FoodEntry, type SpendEntry } from "./types";
 import { after } from "next/server";
 import { insertSpending } from "./spending-supabase";
-import { insertLearning } from "./learnings-supabase";
 import { insertProblem } from "./problems-supabase";
 import { insertIdea, listUniqueCategories } from "./ideas-supabase";
 import { classifyIdea } from "./classify-idea";
@@ -9,10 +8,11 @@ import { insertFoodEntry } from "./food-supabase";
 import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
 import { currentIstDate } from "./time";
-import { notifyHermesTaskUpsert } from "./hermes-reminders";
+import { notifyHermesTaskUpsert, notifyHermesEventUpsert, notifyHermesEventCancel } from "./hermes-reminders";
 import type { TaskRow } from "./tasks-types";
 import { isSpendCategory } from "./spending";
 import { formatINR } from "./currency";
+import { normalizeWorkoutExercises, summarizeWorkoutExercises, type RawWorkoutExercise } from "./workout-normalization";
 import {
   deleteTimeBlock,
   insertTimeBlock,
@@ -275,12 +275,13 @@ export async function applyParsedAction(
     const endTime = String(data.end || defaultEnd?.end);
     const endDate = String(data.end_date || defaultEnd?.endDate || eventDate);
     if (endDate !== eventDate) throw new Error("Dash schedule blocks must start and end on the same day.");
-    await insertTimeBlock(eventDate, {
+    const createdBlock = await insertTimeBlock(eventDate, {
       activity: String(data.title),
       start: String(data.start),
       end: endTime,
       category: "Other",
     }, dbScope);
+    after(() => notifyHermesEventUpsert(createdBlock));
     return `Event created: "${data.title}" on ${eventDate}, ${data.start}–${endTime}`;
   }
 
@@ -308,18 +309,21 @@ export async function applyParsedAction(
       throw new Error("Updated calendar event end must be after its start.");
     }
 
-    await updateTimeBlock(String(event.event_id), {
+    const updatedBlock = await updateTimeBlock(String(event.event_id), {
       activity: typeof event.new_title === "string" ? event.new_title : undefined,
       date: nextDate,
       start,
       end,
     }, dbScope);
+    after(() => notifyHermesEventUpsert(updatedBlock));
     return `Event updated: "${event.new_title || event.current_title}"`;
   }
 
   if (type === "calendar_event_delete") {
     const event = (await prepareParsedAction(action, targetDate, dbScope)).data;
-    await deleteTimeBlock(String(event.event_id), dbScope);
+    const deletedId = String(event.event_id);
+    await deleteTimeBlock(deletedId, dbScope);
+    after(() => notifyHermesEventCancel(deletedId));
     return `Event deleted: "${event.current_title}"`;
   }
 
@@ -334,12 +338,6 @@ export async function applyParsedAction(
       tasks.map((t) => insertTaskEntry(targetDate, t, dbScope))
     );
     return saved.map((s) => `"${s.title}" due ${s.label}`).join(" · ");
-  }
-
-  if (type === "learning") {
-    const text = extractText(data);
-    await insertLearning(targetDate, text, dbScope);
-    return `Learning logged: "${text.slice(0, 60)}"`;
   }
 
   if (type === "idea") {
@@ -357,37 +355,46 @@ export async function applyParsedAction(
   }
 
   if (type === "workout") {
-    type ExerciseSet = { reps: number; weight_kg: number };
-    type Exercise = { name: string; sets: ExerciseSet[]; notes?: string };
     const workoutDate = (data.date as string) || targetDate;
-    const exercises = (data.exercises as Exercise[]) ?? [];
+    const exercises = (data.exercises as RawWorkoutExercise[]) ?? [];
+    const workoutTitle = normalizeWorkoutTitle((data.title || data.muscle_group) as string | undefined, exercises);
     // Insert workout row
-    const { data: wk, error: wkErr } = await dbScope.supabase
+    const insertWorkout = await dbScope.supabase
       .from("workouts")
-      .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate })
+      .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate, title: workoutTitle })
       .select("id")
       .single();
-    if (wkErr) throw new Error(wkErr.message);
+    let wk = insertWorkout.data;
+    let wkErr = insertWorkout.error;
+    if (wkErr && (wkErr.code === "42703" || wkErr.message.includes("schema cache") || wkErr.message.includes("column"))) {
+      const fallbackInsert = await dbScope.supabase
+        .from("workouts")
+        .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate })
+        .select("id")
+        .single();
+      wk = fallbackInsert.data;
+      wkErr = fallbackInsert.error;
+    }
+    if (wkErr || !wk) throw new Error(wkErr?.message || "Failed to create workout");
 
-    // Insert one row per set per exercise
-    const setRows = exercises.flatMap((ex) =>
-      ex.sets.map((s, si) => ({
+    // Insert one row per set per exercise. Weight-only entries are represented
+    // with reps = 0 so the exercise is still saved.
+    const setRows = normalizeWorkoutExercises(exercises).map((s) => ({
         workout_id: wk.id,
         owner_user_id: dbScope.ownerUserId,
-        exercise_name: ex.name,
-        set_number: si + 1,
+        exercise_name: s.exercise_name,
+        set_number: s.set_number,
         reps: s.reps,
         weight_kg: s.weight_kg,
-        notes: ex.notes ?? "",
-      }))
-    );
+        notes: s.notes,
+      }));
     if (setRows.length > 0) {
       const { error: exErr } = await dbScope.supabase.from("workout_exercises").insert(setRows);
       if (exErr) throw new Error(exErr.message);
     }
 
-    const summary = exercises.map((e) => `${e.name} (${e.sets.length} sets)`).join(", ");
-    return `Workout logged: ${summary || "no exercises recorded"}`;
+    const summary = summarizeWorkoutExercises(exercises);
+    return `Workout logged: ${workoutTitle}: ${summary || "no exercises recorded"}`;
   }
 
   if (type === "chat") {
@@ -395,6 +402,21 @@ export async function applyParsedAction(
   }
 
   return "I did not save this because generic notes are disabled.";
+}
+
+function normalizeWorkoutTitle(
+  title: string | undefined,
+  exercises: RawWorkoutExercise[]
+) {
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle) return trimmedTitle.slice(0, 120);
+
+  const exerciseNames = exercises
+    .map((exercise) => exercise.name?.trim() ?? "")
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return exerciseNames.length > 0 ? exerciseNames.join(" + ") : "Workout Session";
 }
 
 export async function handleNaturalLanguage(
@@ -517,11 +539,6 @@ export function formatActionPreview(action: ParsedAction): string {
     return `I found ${tasks.length} tasks:\n${lines}\nSave them? Reply *yes* or *no*.`;
   }
 
-  if (type === "learning") {
-    const dateLabel = formatDateLabel(data.date as string);
-    return `I parsed a learning note${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
-  }
-
   if (type === "idea") {
     return `I parsed an idea: *${data.text}*.\nNote it down? Reply *yes* or *no*.`;
   }
@@ -532,7 +549,8 @@ export function formatActionPreview(action: ParsedAction): string {
 
   if (type === "workout") {
     const dateLabel = formatDateLabel(data.date as string);
-    return `I parsed a workout${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
+    const title = (data.title || data.muscle_group) as string | undefined;
+    return `I parsed a workout${title ? `: *${title}*` : ""}${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "chat") {

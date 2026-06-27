@@ -3,16 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { format, parseISO, subDays } from "date-fns";
-import { ArrowUp, ChevronLeft, ChevronRight, Calendar as CalendarIcon, GripVertical, Pencil, X } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { Pencil, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Check, Plus, Trash2, GripVertical, Lightbulb, Archive } from "lucide-react";
 import { formatINR } from "@/lib/currency";
 import type { TicketRow, TicketSubtaskDetails } from "@/lib/tickets-types";
 import type {
-  ActivityApiRow,
+  CockpitPostcard,
   DashBlock,
   DashData,
   DashFeed,
-  DashLearning,
   DashTask,
   FoodApiRow,
   SpendApiRow,
@@ -21,7 +20,7 @@ import type {
   WorkoutApiRow,
 } from "./types";
 
-export type { ActivityApiRow, DashBlock, DashData, DashLearning, DashTask } from "./types";
+export type { DashBlock, DashData, DashTask } from "./types";
 
 // ── Day timeline ──────────────────────────────────────────────────────────────
 const TL_START = 6 * 60;   // 6:00 AM
@@ -116,7 +115,6 @@ export function useDashData(
   dateOverride?: string,
   refreshTrigger?: number,
   options?: {
-    includeLearnings?: boolean;
     includeTasks?: boolean;
     includeProblems?: boolean;
     includeQuotes?: boolean;
@@ -125,7 +123,6 @@ export function useDashData(
 ): DashData | null {
   const [data, setData] = useState<DashData | null>(null);
 
-  const includeLearnings = options?.includeLearnings ?? true;
   const includeTasks = options?.includeTasks ?? true;
   const includeProblems = options?.includeProblems ?? true;
   const includeQuotes = options?.includeQuotes ?? true;
@@ -136,7 +133,6 @@ export function useDashData(
 
     async function load() {
       const today = dateOverride || localIsoDate();
-      const learningDates = Array.from({ length: 14 }, (_, i) => localIsoDate(subDays(new Date(today), i)));
 
       const dailyResPromise = fetch(`/api/daily?date=${today}`).then((r) => r.json());
 
@@ -147,19 +143,6 @@ export function useDashData(
       const problemsResPromise = includeProblems
         ? fetch("/api/problems").then((r) => r.json()).catch(() => ({ problems: [] }))
         : Promise.resolve({ problems: [] });
-
-      const learningsResPromise = includeLearnings
-        ? fetch(`/api/learnings?startDate=${learningDates[13]}&endDate=${today}`)
-            .then((r) => r.json())
-            .then((j) => {
-              const items = (j.items ?? []) as { id: string; text: string; date: string }[];
-              return learningDates.map((d) => ({
-                date: d,
-                items: items.filter((item) => item.date === d),
-              }));
-            })
-            .catch(() => learningDates.map((d) => ({ date: d, items: [] })))
-        : Promise.resolve([]);
 
       const quotesResPromise = includeQuotes
         ? fetch("/api/quotes").then((r) => r.json()).catch(() => ({ quotes: [] }))
@@ -173,14 +156,12 @@ export function useDashData(
         dailyRes,
         tasksRes,
         problemsRes,
-        learningsRes,
         quotesRes,
         workoutsRes,
       ] = await Promise.all([
         dailyResPromise,
         tasksResPromise,
         problemsResPromise,
-        learningsResPromise,
         quotesResPromise,
         workoutsResPromise,
       ]);
@@ -191,7 +172,6 @@ export function useDashData(
       const food = (dailyRes.food ?? []) as FoodApiRow[];
       const spending = (dailyRes.spending ?? []) as SpendApiRow[];
       const timeBlocks = (dailyRes.time_blocks ?? []) as TimeBlockApiRow[];
-      const activities = (dailyRes.activities ?? []) as ActivityApiRow[];
       const allTasks = (tasksRes.tasks ?? []) as TaskApiRow[];
       const todayWorkouts = ((workoutsRes.workouts ?? []) as WorkoutApiRow[])
         .filter((workout) => workout.occurred_date === today);
@@ -271,19 +251,6 @@ export function useDashData(
         done: task.done,
         due_at: task.due_at,
       }));
-
-      const learningRows: DashLearning[] = (learningsRes as { date: string; items: { id: string; text: string }[] }[])
-        .flatMap((day) =>
-          day.items.map((item) => ({
-            id: item.id,
-            isoDate: day.date,
-            date: day.date === today ? "today" : format(new Date(`${day.date}T12:00:00`), "MMM d"),
-            text: item.text,
-            tag: "note",
-          }))
-        )
-        .slice(0, 5);
-
       const meals = food.map((f) => ({
         id: f.id,
         t: f.time,
@@ -325,12 +292,6 @@ export function useDashData(
           verb: "logged",
           obj: `${s.item} · ${formatINR(s.amount)}`,
         })),
-        ...activities.map<DashFeed>((a) => ({
-          t: a.time,
-          who: a.actor,
-          verb: a.verb,
-          obj: a.body,
-        })),
       ].sort((a, b) => toMinutes(b.t) - toMinutes(a.t));
 
       setData({
@@ -345,8 +306,6 @@ export function useDashData(
         BLOCKS: blocks,
         TASKS: taskRows,
         DONE_TASKS: doneTaskRows,
-        ACTIVITIES: activities.sort((a, b) => toMinutes(b.time) - toMinutes(a.time)),
-        LEARNINGS: learningRows,
         FEED: feed,
         MEALS: meals,
         SPEND: spend,
@@ -378,7 +337,7 @@ export function useDashData(
     return () => {
       cancelled = true;
     };
-  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeProblems, includeQuotes, includeWorkouts]);
+  }, [dateOverride, refreshTrigger, includeTasks, includeProblems, includeQuotes, includeWorkouts]);
 
   return data;
 }
@@ -463,13 +422,12 @@ export function Eyebrow({
 
 const NAV_ITEMS = [
   { id: "cockpit", label: "cockpit", href: "/" },
-  { id: "tasks", label: "tasks", href: "/tasks" },
-  { id: "calendar", label: "calendar", href: "/calendar" },
+  { id: "tasksCalendar", label: "tasks & calendar", href: "/tasks" },
   { id: "food", label: "food & spend", href: "/food" },
   { id: "workouts", label: "workouts", href: "/workouts" },
 ];
 
-type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts";
+type NavItemId = "cockpit" | "tasksCalendar" | "food" | "workouts";
 
 function Nav({ active }: { active: NavItemId }) {
   return (
@@ -846,24 +804,6 @@ export function TaskRow({ t, onToggle, onDelete }: { t: DashTask; onToggle?: (ta
     </div>
   );
 }
-
-export function LearningRow({ l, onDelete }: { l: DashLearning; onDelete?: (learning: DashLearning) => void }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 12, alignItems: "start", padding: "10px 0", borderBottom: "1px dashed var(--line)" }}>
-      <span className="mono" style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
-        {l.date}
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.35 }}>{l.text}</div>
-        <div className="mono" style={{ marginTop: 3, fontSize: 9, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-          {l.tag}
-        </div>
-      </div>
-      {onDelete && <DeleteBtn onClick={() => onDelete(l)} label="Delete learning" />}
-    </div>
-  );
-}
-
 export function MealRow({ m, onDelete }: { m: DashData["MEALS"][number]; onDelete?: (m: DashData["MEALS"][number]) => void }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "56px 1fr 64px 50px 24px", gap: 14, alignItems: "center", padding: "12px 0", borderBottom: "1px dashed var(--line)", fontSize: 14 }}>
@@ -907,7 +847,21 @@ export function LedgerHeader({ items }: { items: { label: string; value: string 
   );
 }
 
-export function DayTimeline({ blocks, tasks, nowMin, isToday }: { blocks: DashBlock[]; tasks: DashTask[]; nowMin: number; isToday: boolean }) {
+export function DayTimeline({
+  blocks,
+  tasks,
+  nowMin,
+  isToday,
+  onBlockClick,
+  selectedBlockId,
+}: {
+  blocks: DashBlock[];
+  tasks: DashTask[];
+  nowMin: number;
+  isToday: boolean;
+  onBlockClick?: (block: DashBlock) => void;
+  selectedBlockId?: string;
+}) {
   const SLOT_MINUTES = 15;
   const SLOT_HEIGHT = 44;
   const ROWS = Array.from({ length: Math.floor(TL_SPAN / SLOT_MINUTES) + 1 }, (_, i) => TL_START + i * SLOT_MINUTES);
@@ -929,14 +883,48 @@ export function DayTimeline({ blocks, tasks, nowMin, isToday }: { blocks: DashBl
           </div>
         );
       })}
-      {blocks.map((b, i) => {
+      {blocks.map((b) => {
         const top = minuteToPx(toMinutes(b.start));
         const h = Math.max(minuteToPx(toMinutes(b.end)) - top, SLOT_HEIGHT - 2);
         const isCal = b.kind === "cal";
         const bgColor = isCal ? "#1e5a8f" : (CAT_COLOR[b.cat || "Other"] ?? CAT_COLOR.Other);
         const compact = h <= SLOT_HEIGHT + 2;
+        const blockKey = b.id ?? `${b.kind}-${b.start}-${b.end}-${b.label}`;
+        const isSelected = selectedBlockId === blockKey;
         return (
-          <div key={i} style={{ position: "absolute", top, height: h, left: LABEL_W + 18, right: 0, background: bgColor, border: "2px solid #000", borderRadius: 7, padding: compact ? "5px 10px" : "7px 12px", overflow: "hidden", boxShadow: "2px 2px 0 #000", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div
+            key={blockKey}
+            role={onBlockClick ? "button" : undefined}
+            tabIndex={onBlockClick ? 0 : undefined}
+            onClick={() => onBlockClick?.(b)}
+            onKeyDown={(event) => {
+              if (!onBlockClick) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onBlockClick(b);
+              }
+            }}
+            style={{
+              position: "absolute",
+              top,
+              height: h,
+              left: LABEL_W + 18,
+              right: 0,
+              background: bgColor,
+              border: "2px solid #000",
+              borderRadius: 7,
+              padding: compact ? "5px 10px" : "7px 12px",
+              overflow: "hidden",
+              boxShadow: isSelected ? "4px 4px 0 #000" : "2px 2px 0 #000",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              cursor: onBlockClick ? "pointer" : "default",
+              outline: isSelected ? "2px solid #fef08a" : "none",
+              outlineOffset: 2,
+              zIndex: isSelected ? 4 : 1,
+            }}
+          >
             <div style={{ fontSize: compact ? 12 : 13, color: "#fff", fontWeight: 800, lineHeight: 1.12, letterSpacing: 0, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.label}</div>
             <div className="mono" style={{ fontSize: compact ? 10 : 11, color: "rgba(255,255,255,0.82)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {b.start}–{b.end}{b.cat && !isCal ? ` · ${b.cat}` : ""}{b.loc ? ` · ${b.loc}` : ""}

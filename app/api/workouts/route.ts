@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import { normalizeWorkoutExercises, type RawWorkoutExercise } from "@/lib/workout-normalization";
 
 export async function GET() {
   try {
     const { supabase, ownerUserId } = await getUserScopedDb();
     // Fetch workouts with their exercises (sets) in one query
-    const { data, error } = await supabase
+    const fetchWorkoutsWithTitle = () => supabase
+      .from("workouts")
+      .select(`
+        id,
+        title,
+        occurred_date,
+        created_at,
+        workout_exercises (
+          id,
+          exercise_name,
+          set_number,
+          reps,
+          weight_kg,
+          notes
+        )
+      `)
+      .eq("owner_user_id", ownerUserId)
+      .order("occurred_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    const fetchWorkoutsWithoutTitle = () => supabase
       .from("workouts")
       .select(`
         id,
@@ -24,6 +45,13 @@ export async function GET() {
       .order("occurred_date", { ascending: false })
       .order("created_at", { ascending: false });
 
+    let { data, error } = await fetchWorkoutsWithTitle();
+    if (error && (error.code === "42703" || error.message.includes("schema cache") || error.message.includes("column"))) {
+      const fallback = await fetchWorkoutsWithoutTitle();
+      data = (fallback.data ?? []).map((workout) => ({ ...workout, title: "Workout Session" }));
+      error = fallback.error;
+    }
+
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     return NextResponse.json({ workouts: data });
@@ -34,19 +62,21 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { date, exercises } = await req.json() as {
+    const { date, exercises = [], title } = await req.json() as {
       date: string;
-      exercises: { name: string; sets: { reps: number; weight_kg: number }[]; notes?: string }[];
+      title?: string;
+      exercises?: RawWorkoutExercise[];
     };
     const { supabase, ownerUserId } = await getUserScopedDb();
+    const workoutTitle = normalizeWorkoutTitle(title, exercises);
 
     let wk = null;
     let wkErr = null;
 
-    // Try inserting with 'text' to satisfy the constraint on remote database (unmigrated)
+    // Try inserting with 'text' to satisfy the constraint on older databases that still have it.
     const insertRes = await supabase
       .from("workouts")
-      .insert({ owner_user_id: ownerUserId, occurred_date: date, text: "Workout Session" })
+      .insert({ owner_user_id: ownerUserId, occurred_date: date, title: workoutTitle, text: workoutTitle })
       .select("id")
       .single();
 
@@ -59,11 +89,21 @@ export async function POST(req: NextRequest) {
       if (isSchemaError) {
         const retryRes = await supabase
           .from("workouts")
-          .insert({ owner_user_id: ownerUserId, occurred_date: date })
+          .insert({ owner_user_id: ownerUserId, occurred_date: date, title: workoutTitle })
           .select("id")
           .single();
-        wk = retryRes.data;
-        wkErr = retryRes.error;
+        if (retryRes.error) {
+          const legacyRetryRes = await supabase
+            .from("workouts")
+            .insert({ owner_user_id: ownerUserId, occurred_date: date })
+            .select("id")
+            .single();
+          wk = legacyRetryRes.data;
+          wkErr = legacyRetryRes.error;
+        } else {
+          wk = retryRes.data;
+          wkErr = retryRes.error;
+        }
       } else {
         wkErr = insertRes.error;
       }
@@ -73,17 +113,15 @@ export async function POST(req: NextRequest) {
 
     if (wkErr || !wk) return NextResponse.json({ error: wkErr?.message || "Failed to create workout" }, { status: 500 });
 
-    const setRows = exercises.flatMap((ex) =>
-      ex.sets.map((s, si) => ({
+    const setRows = normalizeWorkoutExercises(exercises).map((s) => ({
         workout_id: wk.id,
         owner_user_id: ownerUserId,
-        exercise_name: ex.name,
-        set_number: si + 1,
+        exercise_name: s.exercise_name,
+        set_number: s.set_number,
         reps: s.reps,
         weight_kg: s.weight_kg,
-        notes: ex.notes ?? "",
-      }))
-    );
+        notes: s.notes,
+      }));
 
     if (setRows.length > 0) {
       const { error: exErr } = await supabase.from("workout_exercises").insert(setRows);
@@ -118,20 +156,25 @@ export async function DELETE(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { id, exercises, date } = await req.json() as {
+    const { id, exercises = [], date, title } = await req.json() as {
       id: string;
-      exercises: { name: string; sets: { reps: number; weight_kg: number }[]; notes?: string }[];
+      exercises?: RawWorkoutExercise[];
       date?: string;
+      title?: string;
     };
     if (!id) {
       return NextResponse.json({ error: "Missing workout ID" }, { status: 400 });
     }
     const { supabase, ownerUserId } = await getUserScopedDb();
 
-    if (date) {
+    const updatePayload: { occurred_date?: string; title?: string } = {};
+    if (date) updatePayload.occurred_date = date;
+    if (title !== undefined) updatePayload.title = normalizeWorkoutTitle(title, exercises);
+
+    if (Object.keys(updatePayload).length > 0) {
       const { error: dateErr } = await supabase
         .from("workouts")
-        .update({ occurred_date: date })
+        .update(updatePayload)
         .eq("id", id)
         .eq("owner_user_id", ownerUserId);
       if (dateErr) return NextResponse.json({ error: dateErr.message }, { status: 500 });
@@ -147,17 +190,15 @@ export async function PUT(req: NextRequest) {
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
     // 2. Prepare new rows
-    const setRows = exercises.flatMap((ex) =>
-      ex.sets.map((s, si) => ({
+    const setRows = normalizeWorkoutExercises(exercises).map((s) => ({
         workout_id: id,
         owner_user_id: ownerUserId,
-        exercise_name: ex.name,
-        set_number: si + 1,
+        exercise_name: s.exercise_name,
+        set_number: s.set_number,
         reps: s.reps,
         weight_kg: s.weight_kg,
-        notes: ex.notes ?? "",
-      }))
-    );
+        notes: s.notes,
+      }));
 
     // 3. Insert new rows
     if (setRows.length > 0) {
@@ -171,3 +212,17 @@ export async function PUT(req: NextRequest) {
   }
 }
 
+function normalizeWorkoutTitle(
+  title: string | undefined,
+  exercises: RawWorkoutExercise[]
+) {
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle) return trimmedTitle.slice(0, 120);
+
+  const exerciseNames = exercises
+    .map((exercise) => exercise.name?.trim() ?? "")
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return exerciseNames.length > 0 ? exerciseNames.join(" + ") : "Workout Session";
+}
