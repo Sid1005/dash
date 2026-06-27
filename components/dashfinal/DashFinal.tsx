@@ -473,15 +473,15 @@ type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "wor
 
 function Nav({ active }: { active: NavItemId }) {
   return (
-    <nav style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+    <nav style={{ display: "flex", alignItems: "center", gap: 26, flexShrink: 0 }}>
       {NAV_ITEMS.map((item) => (
         <Link
           key={item.id}
           href={item.href}
           className={`mono nav-link ${item.id === active ? "nav-link-active" : ""}`}
           style={{
-            fontSize: 11,
-            letterSpacing: "0.05em",
+            fontSize: 15,
+            letterSpacing: "0.04em",
             textTransform: "lowercase",
             outline: "none",
           }}
@@ -508,43 +508,44 @@ export function PageHeader({ active, data }: { active: NavItemId; data: DashData
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "16px 40px",
-        borderBottom: "1px solid var(--line)",
+        padding: "18px 30px",
+        borderBottom: "2px solid var(--line)",
         backgroundColor: "var(--bg)",
         flexShrink: 0,
         zIndex: 100
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div
           style={{
-            width: 22,
-            height: 22,
-            border: "2px solid var(--text)",
+            width: 30,
+            height: 30,
+            background: "var(--text)",
+            borderRadius: 4,
             display: "grid",
             placeItems: "center",
-            fontFamily: "var(--mono)",
-            fontSize: 12,
-            fontWeight: 800,
-            color: "var(--text)"
+            fontFamily: "var(--sans)",
+            fontSize: 16,
+            fontWeight: 700,
+            color: "#ffffff"
           }}
         >
           D
         </div>
-        <span className="mono" style={{ fontSize: 12, letterSpacing: "0.15em", fontWeight: 600 }}>
+        <span className="mono" style={{ fontSize: 15, letterSpacing: "0.18em", fontWeight: 700, color: "var(--text)" }}>
           DASH
         </span>
       </div>
 
       <Nav active={active} />
 
-      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-        <span className="mono" style={{ fontSize: 16, fontWeight: 500 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
           {t}
         </span>
-        <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "var(--muted)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
-          <span style={{ width: 5, height: 5, borderRadius: 999, background: "var(--text)" }} />
-          synced
+        <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#6B675E", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#2FBF71" }} />
+          SYNCED
         </span>
       </div>
     </header>
@@ -1087,7 +1088,6 @@ function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): C
   else if (lower.includes("very important") || lower.includes("must")) importance = "high";
   else if (lower.includes("important")) importance = "medium";
   else if (lower.includes("low priority")) importance = "low";
-
   const subtaskMatch = cleaned.match(/\b(?:subtasks?|steps?)\b\s*(?::|->|-)?\s*([\s\S]*)/i);
   const subtasks = subtaskMatch
     ? subtaskMatch[1]
@@ -1101,19 +1101,30 @@ function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): C
 
 function CockpitCard({
   eyebrow,
-  tone = COCKPIT_BLUE,
+  tone = "#ffffff",
   className = "",
+  headerMeta,
+  style,
   children,
 }: {
   eyebrow: string;
   tone?: string;
   className?: string;
+  headerMeta?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
-    <section className={`cockpit-card ${className}`.trim()}>
+    <section className={`cockpit-card ${className}`.trim()} style={style}>
       <span className="zine-paperclip" />
-      <div className="zine-eyebrow" style={{ background: tone }}>{eyebrow}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 12 }}>
+        <div className="zine-eyebrow" style={{ background: tone, marginBottom: 0 }}>{eyebrow}</div>
+        {headerMeta && (
+          <span className="mono" style={{ fontSize: 9.5, color: "var(--muted)", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 36 }}>
+            {headerMeta}
+          </span>
+        )}
+      </div>
       {children}
     </section>
   );
@@ -1151,20 +1162,27 @@ function MiniPill({
 
 function RequiredFieldChips({ draft }: { draft: CockpitTicketDraft }) {
   const fields = [
-    ["title", draft.title],
-    ["due date", draft.dueDate],
-    ["importance", draft.importance ? IMPORTANCE_LABELS[draft.importance] : ""],
-    ["subtasks", draft.subtasks.length ? `${draft.subtasks.length} found` : ""],
+    ["TITLE", draft.title],
+    ["DUE", draft.dueDate ? draft.dueDate.toLowerCase() : ""],
+    ["IMPORTANCE", draft.importance ? IMPORTANCE_LABELS[draft.importance].toLowerCase() : ""],
+    ["SUBTASKS", draft.subtasks.length ? String(draft.subtasks.length) : ""],
   ] as const;
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 7, margin: "10px 0 12px" }}>
+    <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 8, margin: "14px 0 16px" }}>
       {fields.map(([label, value]) => {
         const complete = Boolean(value);
         return (
           <span key={label} className={`required-chip ${complete ? "complete" : ""}`}>
             <b>{label}</b>
-            <span>{complete ? value : "waiting"}</span>
+            {complete ? (
+              <>
+                <span style={{ margin: "0 2px" }}>·</span>
+                <span>{value}</span>
+              </>
+            ) : (
+              <span style={{ marginLeft: 6 }}>waiting</span>
+            )}
           </span>
         );
       })}
@@ -1180,26 +1198,28 @@ function AgentQuickTags({
   onSelect: (agent: CockpitAgent | null) => void;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
       <button
         type="button"
         onClick={() => onSelect(null)}
-        className="agent-quick-tag mono"
+        className={`agent-quick-tag mono ${selectedAgent === null ? "active" : ""}`}
         style={{ background: selectedAgent === null ? COCKPIT_BLUE : "#ffffff" }}
       >
         No agent
       </button>
-      {(Object.keys(AGENT_LABELS) as CockpitAgent[]).map((agent) => (
-        <button
-          key={agent}
-          type="button"
-          onClick={() => onSelect(agent)}
-          className="agent-quick-tag mono"
-          style={{ background: selectedAgent === agent ? AGENT_COLORS[agent] : "#ffffff" }}
-        >
-          @{AGENT_LABELS[agent]}
-        </button>
-      ))}
+      {(Object.keys(AGENT_LABELS) as CockpitAgent[])
+        .filter((agent) => agent !== "openclaw")
+        .map((agent) => (
+          <button
+            key={agent}
+            type="button"
+            onClick={() => onSelect(agent)}
+            className={`agent-quick-tag mono ${selectedAgent === agent ? "active" : ""}`}
+            style={{ background: selectedAgent === agent ? COCKPIT_BLUE : "#ffffff" }}
+          >
+            @{AGENT_LABELS[agent].toUpperCase()}
+          </button>
+        ))}
     </div>
   );
 }
@@ -1251,87 +1271,155 @@ function SubtaskMiniCard({
     }
   };
 
+  if (editing) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#FFFCE8", border: "1.5px solid #16130F", padding: "10px 10px", boxShadow: "2px 2px 0 rgba(20,17,12,.14)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2.5px)", gap: "2.5px", flex: "none", opacity: 0.3 }}>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+            <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+          </div>
+          <input
+            value={titleDraft}
+            autoFocus
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveSubtask();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            placeholder="Subtask title"
+            style={{
+              flex: 1,
+              border: "1.5px solid #16130F",
+              background: "#ffffff",
+              padding: "5px 7px",
+              fontFamily: "var(--sans)",
+              fontSize: "15px",
+              color: "#16130F",
+              outline: "none"
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            value={detailDraft}
+            onChange={(e) => setDetailDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveSubtask();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            placeholder="Add details / description..."
+            style={{
+              flex: 1,
+              border: "1.5px solid #16130F",
+              background: "#ffffff",
+              padding: "5px 7px",
+              fontFamily: "var(--mono)",
+              fontSize: "10px",
+              color: "#16130F",
+              outline: "none"
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => void saveSubtask()}
+            title="Save"
+            style={{
+              flex: "none",
+              border: "1.5px solid #16130F",
+              background: "#8BD4F0",
+              padding: "5px 9px",
+              fontFamily: "var(--mono)",
+              fontSize: "9.5px",
+              fontWeight: 600,
+              letterSpacing: ".08em",
+              cursor: "pointer",
+              color: "#16130F"
+            }}
+          >
+            SAVE
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <article
-      className={`subtask-mini-card ${compact ? "compact" : ""}`.trim()}
+    <div
       draggable
       onDragStart={(event) => {
         event.dataTransfer.setData("application/dash-subtask", JSON.stringify({ ticketId: ticket.id, subtask }));
         event.dataTransfer.setData("text/plain", `subtask:${ticket.id}:${subtask}`);
       }}
+      onDoubleClick={() => setEditing(true)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        background: "#FBFBF8",
+        border: "1.5px solid #16130F",
+        padding: "8px 10px",
+        boxShadow: "2px 2px 0 rgba(20,17,12,.14)",
+        cursor: "grab",
+        userSelect: "none"
+      }}
+      title={details ? `Description: ${details}` : "Drag to focus · double-click to edit"}
     >
-      <div className="subtask-mini-row">
-        <GripVertical aria-hidden="true" className="subtask-drag-handle" size={15} strokeWidth={2.6} />
-        <strong>{subtask}</strong>
-        <div className="subtask-row-actions">
-          {!compact && (
-            <button
-              type="button"
-              className="subtask-icon-button"
-              aria-label={`Move ${subtask} to now`}
-              disabled={busy}
-              onClick={() => void onMoveSubtask(ticket.id, subtask, status === "now" ? "backlog" : "now")}
-            >
-              <ArrowUp aria-hidden="true" size={14} strokeWidth={2.6} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="subtask-icon-button"
-            aria-label={`Edit ${subtask}`}
-            disabled={busy}
-            onClick={() => setEditing((current) => !current)}
-          >
-            <Pencil aria-hidden="true" size={13} strokeWidth={2.6} />
-          </button>
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2.5px)", gap: "2.5px", flex: "none", cursor: "grab" }}>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
+        <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
       </div>
-      {editing && (
-        <div className="subtask-edit-panel">
-          <div className="subtask-parent-title">{ticket.title}</div>
-          <input
-            value={titleDraft}
-            onChange={(event) => setTitleDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void saveSubtask();
-              if (event.key === "Escape") {
-                setTitleDraft(subtask);
-                setDetailDraft(details);
-                setEditing(false);
-              }
-            }}
-            aria-label="Subtask title"
-            autoFocus
-          />
-          <textarea
-            value={detailDraft}
-            onChange={(event) => setDetailDraft(event.target.value)}
-            placeholder="Details..."
-            aria-label="Subtask details"
-          />
-          <div className="subtask-actions">
-            <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => void saveSubtask()}>
-              Save
-            </button>
-            <button
-              type="button"
-              className="ticket-move-button mono"
-              disabled={busy}
-              onClick={() => {
-                setTitleDraft(subtask);
-                setDetailDraft(details);
-                setEditing(false);
-              }}
-            >
-              Cancel
-            </button>
-            <button type="button" className="ticket-move-button danger mono" disabled={busy} onClick={() => void onDeleteSubtask(ticket.id, subtask)}>
-              Delete
-            </button>
-          </div>
-        </div>
+      <span style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {subtask}
+      </span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        draggable={false}
+        title="Edit subtask"
+        style={{
+          flex: "none",
+          border: "1px solid #16130F",
+          background: "#ffffff",
+          width: 20,
+          height: 20,
+          lineHeight: 1,
+          fontSize: 10,
+          cursor: "pointer",
+          color: "#16130F",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        ✎
+      </button>
+      {!compact && (
+        <span
+          onClick={() => void onMoveSubtask(ticket.id, subtask, "now")}
+          title="Drag to focus · double-click to edit"
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: "13px",
+            color: "#c0bdb2",
+            flex: "none",
+            cursor: "pointer",
+            userSelect: "none"
+          }}
+        >
+          ↑
+        </span>
       )}
-    </article>
+    </div>
   );
 }
 
@@ -1339,41 +1427,68 @@ function NowSubtaskCard({
   ticket,
   subtask,
   onMoveSubtask,
-  onUpdateSubtask,
   onDeleteSubtask,
 }: {
   ticket: TicketRow;
   subtask: string;
   onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
-  onUpdateSubtask: (id: string, oldSubtask: string, nextSubtask: string, details: string) => Promise<void>;
   onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
 }) {
+  const detailsMap = ticketSubtaskDetails(ticket);
+  const details = detailsMap[subtask]?.details;
+
   return (
-    <article className="focus-subtask-card">
-      <button
-        type="button"
-        className="focus-remove-button"
-        aria-label={`Move ${subtask} back to ticket board`}
-        onClick={() => void onMoveSubtask(ticket.id, subtask, "backlog")}
-      >
-        ×
-      </button>
-      <div className="now-subtask-parent mono">{ticket.title}</div>
-      <SubtaskMiniCard
-        ticket={ticket}
-        subtask={subtask}
-        compact
-        onMoveSubtask={onMoveSubtask}
-        onUpdateSubtask={onUpdateSubtask}
-        onDeleteSubtask={onDeleteSubtask}
-      />
-    </article>
+    <div style={{ display: "flex", alignItems: "stretch", background: "#ffffff", border: "1.5px solid #16130F", boxShadow: "3px 3px 0 rgba(20,17,12,.13)" }}>
+      <div style={{ width: 6, alignSelf: "stretch", flex: "none", background: "#F3E15E" }}></div>
+      <div style={{ flex: 1, padding: "12px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 11, letterSpacing: ".1em", background: "#16130F", color: "#ffffff", padding: "3px 5px" }}>
+              SUBTASK
+            </span>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#8a877d", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {ticket.title}
+            </span>
+          </div>
+          <div style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: 15, color: "#16130F", marginTop: 6 }}>
+            {subtask}
+          </div>
+          {details && (
+            <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #cfccc2", fontFamily: "var(--mono)", fontSize: 11, color: "#5a574e", lineHeight: 1.4 }}>
+              {details}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => void onMoveSubtask(ticket.id, subtask, "backlog")}
+          style={{
+            flex: "none",
+            width: 27,
+            height: 27,
+            border: "1.5px solid #16130F",
+            background: "#ffffff",
+            cursor: "pointer",
+            fontSize: 15,
+            color: "#16130F",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0
+          }}
+          title="Send back to its ticket"
+        >
+          ×
+        </button>
+      </div>
+    </div>
   );
 }
 
 function TicketCard({
   ticket,
   placement = "saved",
+  index = 0,
   onMove,
   onEdit,
   onAddSubtask,
@@ -1384,6 +1499,7 @@ function TicketCard({
 }: {
   ticket: TicketRow;
   placement?: "saved" | "now";
+  index?: number;
   onMove: (id: string, status: "backlog" | "now") => void;
   onEdit: (id: string, title: string) => Promise<void>;
   onAddSubtask: (id: string, subtask: string) => Promise<void>;
@@ -1396,9 +1512,9 @@ function TicketCard({
   const [title, setTitle] = useState(ticket.title);
   const [newSubtask, setNewSubtask] = useState("");
   const [busy, setBusy] = useState(false);
-  const visibleSubtasks = placement === "saved"
-    ? ticket.subtasks
-    : ticket.subtasks.filter((subtask) => subtaskStatus(ticket, subtask) === "backlog");
+  const visibleSubtasks = ticket.subtasks.filter((subtask) => subtaskStatus(ticket, subtask) === "backlog");
+
+  const accent = index % 2 === 0 ? "#8BD4F0" : "#F3E15E";
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1429,12 +1545,29 @@ function TicketCard({
       draggable={placement === "saved"}
       onDragStart={(event) => event.dataTransfer.setData("text/plain", ticket.id)}
     >
-      <div className="ticket-title-strip">
-        <strong>{ticket.title}</strong>
-        <span>{ticketDueText(ticket)} · {ticketImportanceText(ticket)}</span>
+      <div
+        className="ticket-title-strip"
+        onDoubleClick={() => setEditing(true)}
+        style={{
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: "11px 14px",
+          borderBottom: "1.5px solid #16130F",
+          background: accent
+        }}
+      >
+        <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+          {ticket.title}
+        </span>
+        <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0 }}>
+          {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
+        </span>
       </div>
       {editing ? (
-        <div className="saved-ticket-edit">
+        <div className="saved-ticket-edit" style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -1446,67 +1579,106 @@ function TicketCard({
               }
             }}
             autoFocus
+            style={{ width: "100%", border: "1.5px solid #16130F", background: "#ffffff", padding: "6px 7px", fontSize: 13 }}
           />
-          <div>
+          <div style={{ display: "flex", gap: 5 }}>
             <button type="button" className="ticket-move-button mono" disabled={busy || !title.trim()} onClick={() => void saveTitle()}>
               Save
             </button>
             <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => { setTitle(ticket.title); setEditing(false); }}>
               Cancel
             </button>
+            <button type="button" className="ticket-move-button danger mono" disabled={busy} onClick={() => void onDelete(ticket.id)}>
+              Delete
+            </button>
           </div>
         </div>
       ) : null}
-      <div className="saved-ticket-subtasks">
-        {visibleSubtasks.length === 0 && <div className="subtask-empty">No subtasks here.</div>}
-        {visibleSubtasks.map((subtask) => (
-          <SubtaskMiniCard
-            key={subtask}
-            ticket={ticket}
-            subtask={subtask}
-            compact={placement === "now"}
-            onMoveSubtask={onMoveSubtask}
-            onUpdateSubtask={onUpdateSubtask}
-            onDeleteSubtask={onDeleteSubtask}
+      <div className="saved-ticket-subtasks" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        {visibleSubtasks.length === 0 ? (
+          <div style={{ padding: 14, textAlign: "center", fontFamily: "var(--mono)", fontSize: 12, letterSpacing: ".1em", color: "#9a978d", border: "1.5px dashed #cfccc2" }}>
+            ALL IN FOCUS ✓
+          </div>
+        ) : (
+          visibleSubtasks.map((subtask) => (
+            <SubtaskMiniCard
+              key={subtask}
+              ticket={ticket}
+              subtask={subtask}
+              compact={placement === "now"}
+              onMoveSubtask={onMoveSubtask}
+              onUpdateSubtask={onUpdateSubtask}
+              onDeleteSubtask={onDeleteSubtask}
+            />
+          ))
+        )}
+        {placement === "saved" && (
+          <input
+            value={newSubtask}
+            onChange={(event) => setNewSubtask(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void addSubtask();
+              }
+            }}
+            placeholder="+ ADD SUBTASK"
+            style={{
+              width: "100%",
+              border: "1.5px dashed #b4b1a7",
+              background: "transparent",
+              padding: "8px 10px",
+              fontFamily: "var(--mono)",
+              fontSize: 12,
+              letterSpacing: ".1em",
+              textTransform: "uppercase",
+              color: "#7a776e",
+              outline: "none",
+              marginTop: 2
+            }}
           />
-        ))}
+        )}
       </div>
-      {placement === "saved" && <div className="saved-ticket-add-subtask">
-        <input
-          value={newSubtask}
-          onChange={(event) => setNewSubtask(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void addSubtask();
-          }}
-          placeholder="Add subtask"
-        />
-        <button
-          type="button"
-          className="ticket-move-button mono"
-          disabled={busy || !newSubtask.trim()}
-          onClick={() => void addSubtask()}
-        >
-          Add
-        </button>
-      </div>}
-      <div className="saved-ticket-footer">
-        <MiniPill tone="#ffffff">{ticket.status}</MiniPill>
-        <div className="saved-ticket-actions">
-          <button
-            type="button"
-            className="ticket-move-button mono"
-            onClick={() => onMove(ticket.id, ticket.status === "now" ? "backlog" : "now")}
-          >
-            {ticket.status === "now" ? "Backlog" : "To now"}
-          </button>
-          <button type="button" className="ticket-move-button mono" onClick={() => setEditing(true)}>
-            Edit
-          </button>
-          <button type="button" className="ticket-move-button danger mono" onClick={() => void onDelete(ticket.id)}>
-            Delete
-          </button>
-        </div>
-      </div>
+      {placement !== "saved" && (
+        <>
+          <div className="saved-ticket-add-subtask">
+            <input
+              value={newSubtask}
+              onChange={(event) => setNewSubtask(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void addSubtask();
+              }}
+              placeholder="Add subtask"
+            />
+            <button
+              type="button"
+              className="ticket-move-button mono"
+              disabled={busy || !newSubtask.trim()}
+              onClick={() => void addSubtask()}
+            >
+              Add
+            </button>
+          </div>
+          <div className="saved-ticket-footer">
+            <MiniPill tone="#ffffff">{ticket.status}</MiniPill>
+            <div className="saved-ticket-actions">
+              <button
+                type="button"
+                className="ticket-move-button mono"
+                onClick={() => onMove(ticket.id, ticket.status === "now" ? "backlog" : "now")}
+              >
+                {ticket.status === "now" ? "Backlog" : "To now"}
+              </button>
+              <button type="button" className="ticket-move-button mono" onClick={() => setEditing(true)}>
+                Edit
+              </button>
+              <button type="button" className="ticket-move-button danger mono" onClick={() => void onDelete(ticket.id)}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </article>
   );
 }
@@ -1776,8 +1948,18 @@ export function CockpitPage() {
 
       <main className="cockpit-demo-shell">
         <div className="cockpit-demo-grid">
-          <CockpitCard eyebrow="01 - now" tone={COCKPIT_BLUE} className="cockpit-now-card cockpit-primary-card">
+          <CockpitCard eyebrow="↳ NOW · FOCUS 02" tone={COCKPIT_BLUE} className="cockpit-now-card cockpit-primary-card">
             <div className="now-scroll-list">
+              {nowSubtasks.map(({ ticket, subtask }) => (
+                <NowSubtaskCard
+                  key={`${ticket.id}:${subtask}`}
+                  ticket={ticket}
+                  subtask={subtask}
+                  onMoveSubtask={moveTicketSubtask}
+                  onDeleteSubtask={deleteTicketSubtask}
+                />
+              ))}
+
               <div
                 className="now-drop-zone"
                 aria-label="Drop ticket or subtask into now"
@@ -1797,110 +1979,80 @@ export function CockpitPage() {
                   if (id && !id.startsWith("subtask:")) void moveTicket(id, "now");
                 }}
               >
+                ↓ DRAG A SUBTASK HERE TO FOCUS
               </div>
-              {activeTask && <article className="now-item">
-                <div className="cockpit-meta">
-                  <span className="ticket-kind-badge">task</span>
-                </div>
-                <h2>{activeTask.title}</h2>
-                <div className="cockpit-meta">
-                  <MiniPill tone={COCKPIT_BLUE}>{activeTask.weight} task</MiniPill>
-                  <span>{activeTask.due ? `due ${activeTask.due}` : ""}</span>
-                </div>
-              </article>}
-              {nowTickets.map((ticket) => (
-                <TicketCard
-                  key={ticket.id}
-                  ticket={ticket}
-                  placement="now"
-                  onMove={moveTicket}
-                  onEdit={editTicket}
-                  onAddSubtask={addTicketSubtask}
-                  onMoveSubtask={moveTicketSubtask}
-                  onUpdateSubtask={editTicketSubtask}
-                  onDeleteSubtask={deleteTicketSubtask}
-                  onDelete={deleteTicket}
+            </div>
+          </CockpitCard>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 960, width: "100%" }}>
+            <CockpitCard eyebrow="↳ CREATE TICKET 03" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card" headerMeta="BRAIN-DUMP · WE PARSE IT">
+              <div className="ticket-compose-stack">
+                <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
+
+                <textarea
+                  value={ticketText}
+                  onChange={(event) => {
+                    setTicketText(event.target.value);
+                    setSaveState("idle");
+                  }}
+                  className="ticket-composer"
+                  aria-label="Ticket composer"
                 />
-              ))}
-              {nowSubtasks.map(({ ticket, subtask }) => (
-                <NowSubtaskCard
-                  key={`${ticket.id}:${subtask}`}
-                  ticket={ticket}
-                  subtask={subtask}
-                  onMoveSubtask={moveTicketSubtask}
-                  onUpdateSubtask={editTicketSubtask}
-                  onDeleteSubtask={deleteTicketSubtask}
-                />
-              ))}
-            </div>
-          </CockpitCard>
 
-          <CockpitCard eyebrow="02 - create ticket" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card">
-            <div className="ticket-compose-stack">
-              <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
+                <RequiredFieldChips draft={draft} />
 
-              <textarea
-                value={ticketText}
-                onChange={(event) => {
-                  setTicketText(event.target.value);
-                  setSaveState("idle");
-                }}
-                className="ticket-composer"
-                aria-label="Ticket composer"
-              />
-
-              <RequiredFieldChips draft={draft} />
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <button
-                  type="button"
-                  className="cockpit-action-button mono"
-                  disabled={!canSave || !draft.agent || saveState === "saving"}
-                  onClick={() => void persistTicket(true)}
-                >
-                  {saveState === "saving" ? "Saving..." : "Create ticket + start agent"}
-                </button>
-                <button
-                  type="button"
-                  className="cockpit-action-button secondary mono"
-                  disabled={!canSave || saveState === "saving"}
-                  onClick={() => void persistTicket(false)}
-                >
-                  {saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Save ticket only"}
-                </button>
+                <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="cockpit-action-button mono"
+                    disabled={!canSave || !draft.agent || saveState === "saving"}
+                    onClick={() => void persistTicket(true)}
+                  >
+                    {saveState === "saving" ? "Saving..." : "Create ticket + start agent"}
+                  </button>
+                  <button
+                    type="button"
+                    className="cockpit-action-button secondary mono"
+                    disabled={!canSave || saveState === "saving"}
+                    onClick={() => void persistTicket(false)}
+                  >
+                    {saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Save ticket only"}
+                  </button>
+                </div>
               </div>
-            </div>
-          </CockpitCard>
+            </CockpitCard>
 
-          <CockpitCard eyebrow="03 - ticket board" tone={COCKPIT_BLUE} className="cockpit-lower-grid saved-tickets-board">
-            <div className="saved-ticket-header">
-              <div>
-                <h1 className="cockpit-card-title">Ticket board</h1>
+            <CockpitCard eyebrow="↳ TICKET BOARD 04" tone={COCKPIT_BLUE} className="saved-tickets-board" headerMeta="⠿ DRAG SUBTASKS → FOCUS RAIL">
+              <div className="saved-ticket-header" style={{ display: "none" }}>
+                <div>
+                  <h1 className="cockpit-card-title">Ticket board</h1>
+                </div>
+                <MiniPill tone="#ffffff">{ticketsLoading ? "loading" : `${backlogTickets.length} saved`}</MiniPill>
               </div>
-              <MiniPill tone="#ffffff">{ticketsLoading ? "loading" : `${backlogTickets.length} saved`}</MiniPill>
-            </div>
-            {ticketError ? (
-              <div className="saved-ticket-empty">{ticketError}</div>
-            ) : backlogTickets.length === 0 ? (
-              <div className="saved-ticket-empty">No saved tickets yet.</div>
-            ) : (
-              <div className="saved-ticket-grid">
-                {backlogTickets.map((ticket) => (
-                  <TicketCard
-                    key={ticket.id}
-                    ticket={ticket}
-                    onMove={moveTicket}
-                    onEdit={editTicket}
-                    onAddSubtask={addTicketSubtask}
-                    onMoveSubtask={moveTicketSubtask}
-                    onUpdateSubtask={editTicketSubtask}
-                    onDeleteSubtask={deleteTicketSubtask}
-                    onDelete={deleteTicket}
-                  />
-                ))}
-              </div>
-            )}
-          </CockpitCard>
+              {ticketError ? (
+                <div className="saved-ticket-empty">{ticketError}</div>
+              ) : backlogTickets.length === 0 ? (
+                <div className="saved-ticket-empty">No saved tickets yet.</div>
+              ) : (
+                <div className="saved-ticket-grid">
+                  {backlogTickets.map((ticket, idx) => (
+                    <TicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      index={idx}
+                      onMove={moveTicket}
+                      onEdit={editTicket}
+                      onAddSubtask={addTicketSubtask}
+                      onMoveSubtask={moveTicketSubtask}
+                      onUpdateSubtask={editTicketSubtask}
+                      onDeleteSubtask={deleteTicketSubtask}
+                      onDelete={deleteTicket}
+                    />
+                  ))}
+                </div>
+              )}
+            </CockpitCard>
+          </div>
         </div>
       </main>
     </div>
