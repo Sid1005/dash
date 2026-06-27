@@ -23,21 +23,23 @@ import type {
 export type { DashBlock, DashData, DashTask } from "./types";
 
 // ── Day timeline ──────────────────────────────────────────────────────────────
-const TL_START = 6 * 60;   // 6:00 AM
-const TL_END   = 23 * 60;  // 11:00 PM
+const TL_START = 4 * 60 + 30;  // 4:30 AM
+const TL_END   = 22 * 60 + 30; // 10:30 PM
 const TL_SPAN  = TL_END - TL_START;
 
-// Background colors for time block categories — solid, readable on warm beige
-const CAT_COLOR: Record<string, string> = {
-  "Deep Work": "#1a3a8f",   // deep navy
-  Meetings:    "#2c6e8a",   // teal
-  Admin:       "#5a5a7a",   // slate
-  Learning:    "#6b3fa0",   // purple
-  Health:      "#2d7a55",   // forest green
-  Body:        "#2d7a55",   // forest green
-  Personal:    "#8a4a1a",   // warm brown
-  Other:       "#666255",   // warm grey
+// Category accent colors — vibrant left-border + translucent fill pairs
+const CAT_ACCENT: Record<string, { border: string; bg: string; text: string }> = {
+  "Deep Work": { border: "#6366f1", bg: "rgba(99,102,241,0.10)",  text: "#818cf8" },
+  Meetings:    { border: "#14b8a6", bg: "rgba(20,184,166,0.10)",  text: "#5eead4" },
+  Admin:       { border: "#94a3b8", bg: "rgba(148,163,184,0.08)", text: "#cbd5e1" },
+  Learning:    { border: "#a78bfa", bg: "rgba(167,139,250,0.10)", text: "#c4b5fd" },
+  Health:      { border: "#34d399", bg: "rgba(52,211,153,0.10)",  text: "#6ee7b7" },
+  Body:        { border: "#34d399", bg: "rgba(52,211,153,0.10)",  text: "#6ee7b7" },
+  Personal:    { border: "#fbbf24", bg: "rgba(251,191,36,0.10)",  text: "#fcd34d" },
+  Other:       { border: "#78716c", bg: "rgba(120,113,108,0.08)", text: "#a8a29e" },
 };
+const CAT_ACCENT_DEFAULT = CAT_ACCENT.Other;
+const CAL_ACCENT = { border: "#3b82f6", bg: "rgba(59,130,246,0.10)", text: "#93c5fd" };
 
 export const BROWN_LINE = "rgba(205,187,159,0.62)";
 
@@ -887,7 +889,7 @@ export function DayTimeline({
         const top = minuteToPx(toMinutes(b.start));
         const h = Math.max(minuteToPx(toMinutes(b.end)) - top, SLOT_HEIGHT - 2);
         const isCal = b.kind === "cal";
-        const bgColor = isCal ? "#1e5a8f" : (CAT_COLOR[b.cat || "Other"] ?? CAT_COLOR.Other);
+        const accent = isCal ? CAL_ACCENT : (CAT_ACCENT[b.cat || "Other"] ?? CAT_ACCENT_DEFAULT);
         const compact = h <= SLOT_HEIGHT + 2;
         const blockKey = b.id ?? `${b.kind}-${b.start}-${b.end}-${b.label}`;
         const isSelected = selectedBlockId === blockKey;
@@ -910,23 +912,28 @@ export function DayTimeline({
               height: h,
               left: LABEL_W + 18,
               right: 0,
-              background: bgColor,
-              border: "2px solid #000",
-              borderRadius: 7,
-              padding: compact ? "5px 10px" : "7px 12px",
+              background: accent.bg,
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              border: "1px solid rgba(0,0,0,0.06)",
+              borderLeft: `3px solid ${accent.border}`,
+              borderRadius: 10,
+              padding: compact ? "5px 12px" : "8px 14px",
               overflow: "hidden",
-              boxShadow: isSelected ? "4px 4px 0 #000" : "2px 2px 0 #000",
+              boxShadow: isSelected
+                ? `0 0 0 2px ${accent.border}, 0 4px 16px ${accent.border}33`
+                : `0 1px 4px rgba(0,0,0,0.06)`,
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
               cursor: onBlockClick ? "pointer" : "default",
-              outline: isSelected ? "2px solid #fef08a" : "none",
-              outlineOffset: 2,
+              outline: "none",
               zIndex: isSelected ? 4 : 1,
+              transition: "box-shadow 0.2s, border-color 0.2s",
             }}
           >
-            <div style={{ fontSize: compact ? 12 : 13, color: "#fff", fontWeight: 800, lineHeight: 1.12, letterSpacing: 0, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.label}</div>
-            <div className="mono" style={{ fontSize: compact ? 10 : 11, color: "rgba(255,255,255,0.82)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ fontSize: compact ? 12 : 13.5, color: "var(--text)", fontWeight: 700, lineHeight: 1.2, letterSpacing: "0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.label}</div>
+            <div className="mono" style={{ fontSize: compact ? 9.5 : 10.5, color: accent.text, opacity: 0.85, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {b.start}–{b.end}{b.cat && !isCal ? ` · ${b.cat}` : ""}{b.loc ? ` · ${b.loc}` : ""}
             </div>
           </div>
@@ -1538,18 +1545,20 @@ function TicketCard({
         onDoubleClick={() => setEditing(true)}
         style={{
           cursor: "pointer",
+          position: "relative",
           display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
+          alignItems: "center",
+          justifyContent: "center",
           gap: 10,
+          paddingRight: 44,
           background: accent
         }}
       >
         <div className="saved-ticket-header-copy">
-          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "center" }}>
             {ticket.title}
           </span>
-          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0 }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0, textAlign: "center" }}>
             {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
           </span>
         </div>
@@ -1559,6 +1568,7 @@ function TicketCard({
           onClick={() => void onDelete(ticket.id)}
           title="Delete ticket"
           aria-label={`Delete ticket ${ticket.title}`}
+          style={{ position: "absolute", right: 0, top: 0, bottom: 0, margin: "auto 0" }}
         >
           ×
         </button>
@@ -1975,7 +1985,7 @@ export function CockpitPage() {
             </div>
           </CockpitCard>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 960, width: "100%" }}>
+          <div className="cockpit-ticket-stack">
             <CockpitCard eyebrow="↳ CREATE TICKET 03" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card" headerMeta="BRAIN-DUMP · WE PARSE IT">
               <div className="ticket-compose-stack">
                 <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
