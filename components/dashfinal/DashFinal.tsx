@@ -1315,7 +1315,15 @@ function NowSubtaskCard({
   onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
 }) {
   return (
-    <article className="saved-ticket-card now-ticket-card">
+    <article className="focus-subtask-card">
+      <button
+        type="button"
+        className="focus-remove-button"
+        aria-label={`Move ${subtask} back to ticket board`}
+        onClick={() => void onMoveSubtask(ticket.id, subtask, "backlog")}
+      >
+        ×
+      </button>
       <div className="now-subtask-parent mono">{ticket.title}</div>
       <SubtaskMiniCard
         ticket={ticket}
@@ -1440,7 +1448,7 @@ function TicketCard({
           />
         ))}
       </div>
-      <div className="saved-ticket-add-subtask">
+      {placement === "saved" && <div className="saved-ticket-add-subtask">
         <input
           value={newSubtask}
           onChange={(event) => setNewSubtask(event.target.value)}
@@ -1457,7 +1465,7 @@ function TicketCard({
         >
           Add
         </button>
-      </div>
+      </div>}
       <div className="saved-ticket-footer">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {ticket.agent && <MiniPill tone={AGENT_COLORS[ticket.agent]}>@{AGENT_LABELS[ticket.agent]}</MiniPill>}
@@ -1752,6 +1760,7 @@ export function CockpitPage() {
             <div className="now-scroll-list">
               <div
                 className="now-drop-zone"
+                aria-label="Drop ticket or subtask into now"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   const subtaskPayload = event.dataTransfer.getData("application/dash-subtask");
@@ -1768,19 +1777,17 @@ export function CockpitPage() {
                   if (id && !id.startsWith("subtask:")) void moveTicket(id, "now");
                 }}
               >
-                Drop ticket or subtask here
               </div>
-              <article className="now-item">
+              {activeTask && <article className="now-item">
                 <div className="cockpit-meta">
                   <span className="ticket-kind-badge">task</span>
-                  <span>{activeTask ? "front of mind" : "human focus"}</span>
                 </div>
-                <h2>{activeTask?.title ?? "Choose the next visible piece of work"}</h2>
+                <h2>{activeTask.title}</h2>
                 <div className="cockpit-meta">
-                  <MiniPill tone={COCKPIT_BLUE}>{activeTask ? `${activeTask.weight} task` : "all clear"}</MiniPill>
-                  <span>{activeTask ? `due ${activeTask.due || "soon"}` : "no active task"}</span>
+                  <MiniPill tone={COCKPIT_BLUE}>{activeTask.weight} task</MiniPill>
+                  <span>{activeTask.due ? `due ${activeTask.due}` : ""}</span>
                 </div>
-              </article>
+              </article>}
               {nowTickets.map((ticket) => (
                 <TicketCard
                   key={ticket.id}
@@ -1845,10 +1852,10 @@ export function CockpitPage() {
             </div>
           </CockpitCard>
 
-          <CockpitCard eyebrow="03 - saved tickets" tone={COCKPIT_BLUE} className="cockpit-lower-grid saved-tickets-board">
+          <CockpitCard eyebrow="03 - ticket board" tone={COCKPIT_BLUE} className="cockpit-lower-grid saved-tickets-board">
             <div className="saved-ticket-header">
               <div>
-                <h1 className="cockpit-card-title">Saved tickets</h1>
+                <h1 className="cockpit-card-title">Ticket board</h1>
               </div>
               <MiniPill tone="#ffffff">{ticketsLoading ? "loading" : `${backlogTickets.length} saved`}</MiniPill>
             </div>

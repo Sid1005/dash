@@ -382,7 +382,7 @@ a {
 
 .cockpit-demo-grid {
   display: grid;
-  grid-template-columns: minmax(340px, 0.9fr) minmax(460px, 1.1fr);
+  grid-template-columns: minmax(330px, 0.48fr) minmax(620px, 1.12fr);
   grid-template-areas:
     "now ticket"
     "lower lower";
@@ -399,11 +399,18 @@ a {
 }
 
 .cockpit-primary-card {
-  height: min(500px, calc(100vh - 132px));
-  min-height: 360px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.cockpit-ticket-card {
+  min-height: 330px;
+}
+
+.cockpit-now-card {
+  align-self: start;
 }
 
 .cockpit-card {
@@ -544,21 +551,21 @@ a {
 
 .cockpit-action-button {
   border: 2px solid #000000;
-  background: #000000;
-  color: #ffffff;
+  background: #7dd3fc;
+  color: #000000;
   padding: 10px 12px;
   font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  box-shadow: 3px 3px 0 #777770;
+  box-shadow: none;
   cursor: pointer;
 }
 
 .cockpit-action-button.secondary {
   background: #ffffff;
   color: #000000;
-  box-shadow: 3px 3px 0 #000000;
+  box-shadow: none;
 }
 
 .cockpit-action-button:disabled {
@@ -569,6 +576,7 @@ a {
 .cockpit-lower-grid {
   grid-area: lower;
   margin-top: 22px;
+  min-height: 0;
 }
 
 .now-scroll-list,
@@ -580,23 +588,22 @@ a {
   padding-right: 4px;
 }
 
+.now-scroll-list {
+  max-height: min(680px, calc(100vh - 156px));
+  align-content: start;
+}
+
 .ticket-compose-stack {
   align-content: start;
 }
 
 .now-drop-zone {
-  border: 2px dashed #000000;
-  background: rgba(255, 255, 255, 0.42);
-  min-height: 48px;
+  border: 0;
+  background: transparent;
+  min-height: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
 }
 
 .saved-ticket-header {
@@ -609,9 +616,12 @@ a {
 
 .saved-ticket-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+  grid-template-columns: repeat(2, minmax(300px, 1fr));
   gap: 14px;
   align-items: start;
+  max-height: min(620px, calc(100vh - 170px));
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
 .saved-ticket-empty {
@@ -654,6 +664,10 @@ a {
   min-width: 0;
 }
 
+.saved-ticket-grid .saved-ticket-card:nth-child(2n) .ticket-title-strip {
+  background: #fef08a;
+}
+
 .ticket-title-strip span {
   font-family: var(--mono);
   font-size: 9px;
@@ -693,7 +707,7 @@ a {
 
 .saved-ticket-subtasks {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: 1fr;
   gap: 7px;
 }
 
@@ -701,7 +715,7 @@ a {
   position: relative;
   border: 1.5px solid #000000;
   background: #ffffff;
-  padding: 6px;
+  padding: 7px;
   display: grid;
   gap: 0;
   cursor: grab;
@@ -805,7 +819,44 @@ a {
 }
 
 .subtask-kind-badge {
+  background: #000000;
+  color: #ffffff;
+}
+
+.focus-subtask-card {
+  position: relative;
+  border: 2px solid #000000;
   background: #ffffff;
+  padding: 11px 42px 11px 12px;
+  display: grid;
+  gap: 8px;
+  box-shadow: inset 7px 0 0 #fef08a;
+}
+
+.focus-subtask-card .subtask-mini-card {
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.focus-subtask-card .subtask-hover-panel {
+  margin-top: 8px;
+}
+
+.focus-remove-button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  transform: translateY(-50%);
+  border: 2px solid #000000;
+  background: #ffffff;
+  color: #000000;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .subtask-empty {
@@ -926,6 +977,7 @@ a {
     min-height: auto;
     max-height: none;
   }
+
 }
 
 @media (max-width: 680px) {
