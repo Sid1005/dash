@@ -1,11 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { type FoodEntry } from "@/lib/types";
 import {
   deleteFoodEntry,
   insertFoodEntry,
   listFoodEntriesForDate,
 } from "@/lib/food-supabase";
-import { insertActivity, listActivitiesForDate } from "@/lib/activities-supabase";
 import {
   deleteTimeBlock,
   insertTimeBlock,
@@ -18,13 +17,13 @@ import {
 } from "@/lib/spending-supabase";
 import { currentIstDate } from "@/lib/time";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import { notifyHermesEventUpsert, notifyHermesEventCancel } from "@/lib/hermes-reminders";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date") ?? currentIstDate();
   const scope = await getUserScopedDb();
-  const [food, activities, time_blocks, spending] = await Promise.all([
+  const [food, time_blocks, spending] = await Promise.all([
     listFoodEntriesForDate(date, scope),
-    listActivitiesForDate(date, scope),
     listTimeBlocksForDate(date, scope),
     listSpendingForDate(date, scope),
   ]);
@@ -35,7 +34,7 @@ export async function GET(req: NextRequest) {
     category: s.category,
     time: s.time_local,
   }));
-  return NextResponse.json({ date, food, activities, time_blocks, spending: spendingMapped });
+  return NextResponse.json({ date, food, time_blocks, spending: spendingMapped });
 }
 
 export async function POST(req: NextRequest) {
@@ -54,11 +53,8 @@ export async function POST(req: NextRequest) {
   }
   if (type === "time_block") {
     const block = await insertTimeBlock(d, data, scope);
+    after(() => notifyHermesEventUpsert(block));
     return NextResponse.json({ ok: true, time_block: block });
-  }
-  if (type === "activity") {
-    const activity = await insertActivity(d, data, scope);
-    return NextResponse.json({ ok: true, activity });
   }
   return NextResponse.json({ error: "unknown type" }, { status: 400 });
 }
@@ -89,6 +85,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
     await deleteTimeBlock(blockId, scope);
+    after(() => notifyHermesEventCancel(blockId));
     return NextResponse.json({ ok: true });
   }
 

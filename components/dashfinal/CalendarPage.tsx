@@ -108,7 +108,7 @@ export function CalendarPage() {
 
   return (
     <div style={{ height: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", color: "var(--text)" }}>
-      <PageHeader active="calendar" data={null} />
+      <PageHeader active="tasksCalendar" data={null} />
 
       <main style={{ padding: "32px", flex: 1, minHeight: 0, overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(340px, 430px)", gap: 28, height: "100%", maxWidth: 1180, margin: "0 auto" }}>
