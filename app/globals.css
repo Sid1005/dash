@@ -383,8 +383,17 @@ a {
 .cockpit-demo-grid {
   display: grid;
   grid-template-columns: 400px 1fr;
-  gap: 24px;
+  column-gap: 44px;
+  row-gap: 28px;
   align-items: start;
+}
+
+.cockpit-ticket-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1040px;
+  width: 100%;
 }
 
 .cockpit-primary-card {
@@ -624,8 +633,8 @@ a {
 
 .saved-ticket-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  gap: 24px;
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 480px;
@@ -1007,6 +1016,10 @@ a {
 @media (max-width: 1150px) {
   .cockpit-demo-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cockpit-ticket-stack {
+    max-width: none;
   }
 
   .cockpit-lower-grid {

@@ -1985,7 +1985,7 @@ export function CockpitPage() {
             </div>
           </CockpitCard>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 960, width: "100%" }}>
+          <div className="cockpit-ticket-stack">
             <CockpitCard eyebrow="↳ CREATE TICKET 03" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card" headerMeta="BRAIN-DUMP · WE PARSE IT">
               <div className="ticket-compose-stack">
                 <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
