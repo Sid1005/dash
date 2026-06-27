@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { format, parseISO, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from "lucide-react";
+import { ArrowUp, ChevronLeft, ChevronRight, Calendar as CalendarIcon, GripVertical, Pencil, X } from "lucide-react";
 import { formatINR } from "@/lib/currency";
 import type { TicketRow, TicketSubtaskDetails } from "@/lib/tickets-types";
 import type {
@@ -1229,6 +1229,7 @@ function SubtaskMiniCard({
 }) {
   const [titleDraft, setTitleDraft] = useState(subtask);
   const [detailDraft, setDetailDraft] = useState(subtaskDetailText(ticket, subtask));
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const status = subtaskStatus(ticket, subtask);
   const details = subtaskDetailText(ticket, subtask);
@@ -1244,6 +1245,7 @@ function SubtaskMiniCard({
     setBusy(true);
     try {
       await onUpdateSubtask(ticket.id, subtask, nextTitle, detailDraft.trim());
+      setEditing(false);
     } finally {
       setBusy(false);
     }
@@ -1257,46 +1259,78 @@ function SubtaskMiniCard({
         event.dataTransfer.setData("application/dash-subtask", JSON.stringify({ ticketId: ticket.id, subtask }));
         event.dataTransfer.setData("text/plain", `subtask:${ticket.id}:${subtask}`);
       }}
-      tabIndex={0}
     >
       <div className="subtask-mini-row">
-        <span className="subtask-kind-badge">subtask</span>
+        <GripVertical aria-hidden="true" className="subtask-drag-handle" size={15} strokeWidth={2.6} />
         <strong>{subtask}</strong>
-        {details && <span className="subtask-summary">{details}</span>}
-      </div>
-      <div className="subtask-hover-panel">
-        <div className="subtask-parent-title">{ticket.title}</div>
-        <input
-          value={titleDraft}
-          onChange={(event) => setTitleDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void saveSubtask();
-          }}
-          aria-label="Subtask title"
-        />
-        <textarea
-          value={detailDraft}
-          onChange={(event) => setDetailDraft(event.target.value)}
-          placeholder="Details..."
-          aria-label="Subtask details"
-        />
-        <div className="subtask-actions">
-          <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => void saveSubtask()}>
-            Update
-          </button>
+        <div className="subtask-row-actions">
+          {!compact && (
+            <button
+              type="button"
+              className="subtask-icon-button"
+              aria-label={`Move ${subtask} to now`}
+              disabled={busy}
+              onClick={() => void onMoveSubtask(ticket.id, subtask, status === "now" ? "backlog" : "now")}
+            >
+              <ArrowUp aria-hidden="true" size={14} strokeWidth={2.6} />
+            </button>
+          )}
           <button
             type="button"
-            className="ticket-move-button mono"
+            className="subtask-icon-button"
+            aria-label={`Edit ${subtask}`}
             disabled={busy}
-            onClick={() => void onMoveSubtask(ticket.id, subtask, status === "now" ? "backlog" : "now")}
+            onClick={() => setEditing((current) => !current)}
           >
-            {status === "now" ? "Backlog" : "To now"}
-          </button>
-          <button type="button" className="ticket-move-button danger mono" disabled={busy} onClick={() => void onDeleteSubtask(ticket.id, subtask)}>
-            Delete
+            <Pencil aria-hidden="true" size={13} strokeWidth={2.6} />
           </button>
         </div>
       </div>
+      {editing && (
+        <div className="subtask-edit-panel">
+          <div className="subtask-parent-title">{ticket.title}</div>
+          <input
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void saveSubtask();
+              if (event.key === "Escape") {
+                setTitleDraft(subtask);
+                setDetailDraft(details);
+                setEditing(false);
+              }
+            }}
+            aria-label="Subtask title"
+            autoFocus
+          />
+          <textarea
+            value={detailDraft}
+            onChange={(event) => setDetailDraft(event.target.value)}
+            placeholder="Details..."
+            aria-label="Subtask details"
+          />
+          <div className="subtask-actions">
+            <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => void saveSubtask()}>
+              Save
+            </button>
+            <button
+              type="button"
+              className="ticket-move-button mono"
+              disabled={busy}
+              onClick={() => {
+                setTitleDraft(subtask);
+                setDetailDraft(details);
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button type="button" className="ticket-move-button danger mono" disabled={busy} onClick={() => void onDeleteSubtask(ticket.id, subtask)}>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -1396,8 +1430,8 @@ function TicketCard({
       onDragStart={(event) => event.dataTransfer.setData("text/plain", ticket.id)}
     >
       <div className="ticket-title-strip">
-        <span>Ticket</span>
         <strong>{ticket.title}</strong>
+        <span>{ticketDueText(ticket)} · {ticketImportanceText(ticket)}</span>
       </div>
       {editing ? (
         <div className="saved-ticket-edit">
@@ -1422,18 +1456,7 @@ function TicketCard({
             </button>
           </div>
         </div>
-      ) : placement === "saved" ? (
-        <div className="ticket-compact-summary">
-          <span>{ticketDueText(ticket)}</span>
-          <span>{ticketImportanceText(ticket)}</span>
-          <span>{ticket.subtasks.length} subtasks</span>
-        </div>
-      ) : (
-        <div className="ticket-compact-summary">
-          <span>{ticketDueText(ticket)}</span>
-          <span>{ticketImportanceText(ticket)}</span>
-        </div>
-      )}
+      ) : null}
       <div className="saved-ticket-subtasks">
         {visibleSubtasks.length === 0 && <div className="subtask-empty">No subtasks here.</div>}
         {visibleSubtasks.map((subtask) => (
@@ -1467,10 +1490,7 @@ function TicketCard({
         </button>
       </div>}
       <div className="saved-ticket-footer">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {ticket.agent && <MiniPill tone={AGENT_COLORS[ticket.agent]}>@{AGENT_LABELS[ticket.agent]}</MiniPill>}
-          <MiniPill tone={ticket.status === "now" ? COCKPIT_BLUE : "#ffffff"}>{ticket.status}</MiniPill>
-        </div>
+        <MiniPill tone="#ffffff">{ticket.status}</MiniPill>
         <div className="saved-ticket-actions">
           <button
             type="button"
