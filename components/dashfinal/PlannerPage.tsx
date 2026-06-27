@@ -408,8 +408,8 @@ const mainStyle: React.CSSProperties = {
   flex: 1,
   minHeight: 0,
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(360px, 0.82fr)",
-  gap: 24,
+  gridTemplateColumns: "minmax(0, 1fr) minmax(390px, 0.9fr)",
+  gap: 28,
   overflow: "hidden",
 };
 
@@ -541,7 +541,7 @@ const rightRailStyle: React.CSSProperties = {
   minHeight: 0,
   overflowY: "auto",
   overflowX: "hidden",
-  paddingRight: 6,
+  paddingRight: 0,
 };
 
 const dateSubheadStyle: React.CSSProperties = {

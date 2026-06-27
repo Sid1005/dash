@@ -995,6 +995,7 @@ function CockpitPostcardShell({
   y,
   children,
   onPointerDown,
+  onDelete,
 }: {
   title: string;
   eyebrow: string;
@@ -1003,6 +1004,7 @@ function CockpitPostcardShell({
   y: number;
   children: React.ReactNode;
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDelete?: () => void;
 }) {
   return (
     <div
@@ -1044,6 +1046,32 @@ function CockpitPostcardShell({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {count && <span className="mono" style={{ fontSize: 11 }}>{count}</span>}
+          {onDelete && (
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
+              title="Delete postcard"
+              aria-label={`Delete ${title}`}
+              style={{
+                width: 22,
+                height: 22,
+                border: "1px solid #000000",
+                background: "#fffdf5",
+                color: "#000000",
+                display: "grid",
+                placeItems: "center",
+                padding: 0,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              <X size={12} />
+            </button>
+          )}
           {onPointerDown && <GripVertical size={15} />}
         </div>
       </div>
@@ -1508,6 +1536,7 @@ export function CockpitPage() {
                 y={card.y}
                 count={`${card.items.filter((item) => !item.done).length} open`}
                 onPointerDown={(event) => startDrag(card, "user", event)}
+                onDelete={() => deleteCard(card.id)}
               >
                 <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "#ffffff" }}>
                   <div style={{
@@ -1568,14 +1597,6 @@ export function CockpitPage() {
                       }}
                       style={{ width: "100%", border: "none", outline: "none", padding: "12px 14px", fontSize: 13, background: "#ffffff", fontFamily: "inherit" }}
                     />
-                    <button
-                      type="button"
-                      onClick={() => deleteCard(card.id)}
-                      title="Delete postcard"
-                      style={{ border: "none", background: "#ffffff", color: "#b24444", padding: "0 12px", cursor: "pointer" }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
                 </div>
               </CockpitPostcardShell>
