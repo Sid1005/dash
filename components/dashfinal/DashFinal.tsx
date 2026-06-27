@@ -1551,20 +1551,29 @@ function TicketCard({
         style={{
           cursor: "pointer",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "space-between",
-          gap: 12,
-          padding: "11px 14px",
-          borderBottom: "1.5px solid #16130F",
+          gap: 10,
           background: accent
         }}
       >
-        <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
-          {ticket.title}
-        </span>
-        <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0 }}>
-          {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
-        </span>
+        <div className="saved-ticket-header-copy">
+          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "left" }}>
+            {ticket.title}
+          </span>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0 }}>
+            {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="saved-ticket-close"
+          onClick={() => void onDelete(ticket.id)}
+          title="Delete ticket"
+          aria-label={`Delete ticket ${ticket.title}`}
+        >
+          ×
+        </button>
       </div>
       {editing ? (
         <div className="saved-ticket-edit" style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
@@ -1587,9 +1596,6 @@ function TicketCard({
             </button>
             <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => { setTitle(ticket.title); setEditing(false); }}>
               Cancel
-            </button>
-            <button type="button" className="ticket-move-button danger mono" disabled={busy} onClick={() => void onDelete(ticket.id)}>
-              Delete
             </button>
           </div>
         </div>
@@ -1671,9 +1677,6 @@ function TicketCard({
               </button>
               <button type="button" className="ticket-move-button mono" onClick={() => setEditing(true)}>
                 Edit
-              </button>
-              <button type="button" className="ticket-move-button danger mono" onClick={() => void onDelete(ticket.id)}>
-                Delete
               </button>
             </div>
           </div>

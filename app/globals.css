@@ -579,7 +579,8 @@ a {
 }
 
 .now-scroll-list {
-  max-height: min(720px, calc(100vh - 150px));
+  overflow: visible;
+  max-height: none;
   align-content: start;
 }
 
@@ -630,6 +631,36 @@ a {
   max-height: 480px;
   padding-right: 6px;
   align-items: start;
+}
+
+.saved-ticket-header-strip {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1.5px solid #16130F;
+  background: inherit;
+}
+
+.saved-ticket-header-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saved-ticket-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid #16130F;
+  background: #ffffff;
+  color: #16130F;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
 }
 
 .saved-ticket-grid::-webkit-scrollbar {
