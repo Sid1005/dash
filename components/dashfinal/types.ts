@@ -41,6 +41,7 @@ export type WorkoutExerciseApiRow = {
 
 export type WorkoutApiRow = {
   id: string;
+  title: string;
   occurred_date: string;
   workout_exercises: WorkoutExerciseApiRow[];
 };

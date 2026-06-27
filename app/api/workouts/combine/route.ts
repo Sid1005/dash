@@ -13,6 +13,7 @@ interface ExerciseSet {
 
 interface WorkoutWithExercises {
   id: string;
+  title?: string;
   occurred_date: string;
   created_at: string;
   workout_exercises: ExerciseSet[];
@@ -29,7 +30,26 @@ export async function POST(req: NextRequest) {
     const { supabase, ownerUserId } = await getUserScopedDb();
 
     // 1. Fetch the workouts and their exercises to combine
-    const { data: workouts, error: fetchErr } = await supabase
+    const fetchWorkoutsWithTitle = async () => await supabase
+      .from("workouts")
+      .select(`
+        id,
+        title,
+        occurred_date,
+        created_at,
+        workout_exercises (
+          id,
+          exercise_name,
+          set_number,
+          reps,
+          weight_kg,
+          notes
+        )
+      `)
+      .eq("owner_user_id", ownerUserId)
+      .in("id", workoutIds) as { data: WorkoutWithExercises[] | null; error: PostgrestError | null };
+
+    const fetchWorkoutsWithoutTitle = async () => await supabase
       .from("workouts")
       .select(`
         id,
@@ -47,6 +67,13 @@ export async function POST(req: NextRequest) {
       .eq("owner_user_id", ownerUserId)
       .in("id", workoutIds) as { data: WorkoutWithExercises[] | null; error: PostgrestError | null };
 
+    let { data: workouts, error: fetchErr } = await fetchWorkoutsWithTitle();
+    if (fetchErr && (fetchErr.code === "42703" || fetchErr.message.includes("schema cache") || fetchErr.message.includes("column"))) {
+      const fallback = await fetchWorkoutsWithoutTitle();
+      workouts = fallback.data?.map((workout) => ({ ...workout, title: "Workout Session" })) ?? null;
+      fetchErr = fallback.error;
+    }
+
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     if (!workouts || workouts.length === 0) {
       return NextResponse.json({ error: "No workouts found matching the provided IDs." }, { status: 400 });
@@ -57,6 +84,7 @@ export async function POST(req: NextRequest) {
 
     // Keep the first workout ID as the "primary" workout
     const primaryWorkoutId = workouts[0].id;
+    const primaryTitle = workouts[0].title || "Combined Workout";
     const otherWorkoutIds = workouts.slice(1).map(w => w.id);
 
     // 2. Merge all exercises
@@ -109,6 +137,18 @@ export async function POST(req: NextRequest) {
     if (setRows.length > 0) {
       const { error: insErr } = await supabase.from("workout_exercises").insert(setRows);
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    }
+
+    const uniqueTitles = Array.from(new Set(workouts.map((w) => w.title?.trim()).filter(Boolean)));
+    const combinedTitle = uniqueTitles.length > 1 ? uniqueTitles.join(" + ").slice(0, 120) : primaryTitle;
+    const { error: titleErr } = await supabase
+      .from("workouts")
+      .update({ title: combinedTitle })
+      .eq("id", primaryWorkoutId)
+      .eq("owner_user_id", ownerUserId);
+
+    if (titleErr && !(titleErr.code === "42703" || titleErr.message.includes("schema cache") || titleErr.message.includes("column"))) {
+      return NextResponse.json({ error: titleErr.message }, { status: 500 });
     }
 
     // C. Delete the other workouts (their workout_exercises will delete due to cascade references)

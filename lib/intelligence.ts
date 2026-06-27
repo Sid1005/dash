@@ -29,6 +29,7 @@ type WorkoutSet = {
 
 type WorkoutRow = {
   id: string;
+  title: string;
   occurred_date: string;
   created_at: string;
   workout_exercises: WorkoutSet[];
@@ -230,18 +231,13 @@ function isChestWorkoutQuestion(input: string): boolean {
   return /\b(chest|pecs?|pectorals?)\b/i.test(input);
 }
 
-function isChestExerciseName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    /\b(chest|pecs?|pectorals?|bench|push[-\s]?ups?|flyes?|flys?|crossover|dips?)\b/.test(lower) ||
-    /\b(incline|decline|flat)\b.*\bpress\b/.test(lower) ||
-    /\bpress\b.*\b(incline|decline|flat)\b/.test(lower)
-  );
+function isChestWorkoutTitle(title: string): boolean {
+  return /\b(chest|pecs?|pectorals?)\b/i.test(title);
 }
 
 function latestChestWorkouts(workouts: WorkoutRow[], count: number): WorkoutRow[] {
   return workouts
-    .filter((workout) => workout.workout_exercises.some((exercise) => isChestExerciseName(exercise.exercise_name)))
+    .filter((workout) => isChestWorkoutTitle(workout.title))
     .slice(0, count);
 }
 
@@ -328,6 +324,7 @@ async function fetchWorkouts(scope: DbScope, startDate: string, endDate: string)
     .from("workouts")
     .select(`
       id,
+      title,
       occurred_date,
       created_at,
       workout_exercises (
@@ -437,7 +434,7 @@ async function fetchPersonalData(scope: DbScope, plan: QuestionPlan, input: stri
     bundle.workouts = latestChestWorkouts(bundle.workouts, 2);
     bundle.retrievalNote = [
       bundle.retrievalNote,
-      "Chest workout question: searched retrieved workout history and included only the latest two chest-matching workout sessions.",
+      "Chest workout question: searched retrieved workout history and included only sessions whose workout title matches chest/pecs/pectorals.",
     ].filter(Boolean).join(" ");
   }
 
@@ -460,7 +457,7 @@ export async function answerPersonalQuestion(
   const system = `You answer questions about the user's personal dashboard data.
 Only use the provided JSON data. Do not invent missing records, dates, exercises, amounts, or calendar events.
 If the JSON has no relevant records, say that clearly and mention the date range checked.
-For spending, include totals when useful. For workouts, infer the user's requested focus from the question and exercise names, then include date, exercise, sets, reps, weights, and notes when present.
+For spending, include totals when useful. For workouts, infer the user's requested focus from the question, session title, and exercise names, then include session title, date, exercise, sets, reps, weights, and notes when present.
 For food, include calories/protein when useful. For calendar, include Dash schedule blocks when present.
 Use the recent conversation only to resolve follow-ups like "from last week", "that one", or omitted subjects. Answer the current message.
 Telegram formatting rules:
@@ -469,7 +466,7 @@ Telegram formatting rules:
 - For workouts, group by exercise name and do not repeat identical set lines. Collapse sets with the same weight, reps, and notes into one bullet and append the count, for example: "- 4kg x 15 reps, 3 sets". Keep sets separate when their weight, reps, or notes differ. If reps are 0, say "no reps recorded" instead of "0 reps". Use "bodyweight" when weight is 0 or clearly bodyweight.
 - If the question asks for last/latest/most recent workout, answer with the single latest relevant record before today's already logged workout records unless the user explicitly asked for today or is asking for chest workouts. Mention if you skipped today or another excluded period.
 - If the question asks for chest workouts or the last chest workout, show the latest two chest workout records from the retrieved data. Do not impose a one-week, 30-day, or other recent-window limit unless the user explicitly gave that date range.
-- If the user asks for a body-part focus such as chest/back/legs/shoulders/arms, decide relevance from exercise names and common exercise knowledge.
+- If the user asks for chest/pecs/pectorals, decide relevance only from the workout session title, not exercise names.
 - If multiple records matter, show the most relevant 2-4 records and summarize the rest.
 - Keep lines short and skimmable on mobile.
 - Use only simple Markdown bold for headings.

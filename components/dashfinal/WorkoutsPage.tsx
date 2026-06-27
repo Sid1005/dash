@@ -15,6 +15,7 @@ type ExerciseSet = {
 
 type Workout = {
   id: string;
+  title: string;
   occurred_date: string;
   created_at: string;
   workout_exercises: ExerciseSet[];
@@ -45,8 +46,10 @@ export default function WorkoutsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+  const [isCreatingNewWorkout, setIsCreatingNewWorkout] = useState(false);
 
   // Form State for logging new workout
+  const [sessionTitle, setSessionTitle] = useState("");
   const [configuredExercises, setConfiguredExercises] = useState<{
     name: string;
     sets: { reps: number; weight_kg: number }[];
@@ -58,6 +61,7 @@ export default function WorkoutsPage() {
 
   // Editing State
   const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editExercises, setEditExercises] = useState<{
     name: string;
@@ -69,6 +73,12 @@ export default function WorkoutsPage() {
     setIsEditing(false);
   }, [selectedWorkoutId, date]);
 
+  const beginNewWorkout = () => {
+    setSelectedWorkoutId(null);
+    setIsEditing(false);
+    setIsCreatingNewWorkout(true);
+  };
+
   const startEditing = () => {
     if (!selectedWorkout) return;
     const groups = groupExercises(selectedWorkout.workout_exercises);
@@ -77,6 +87,7 @@ export default function WorkoutsPage() {
       sets: g.sets.map((s) => ({ reps: s.reps, weight_kg: s.weight_kg })),
     }));
     setEditExercises(initialEdit);
+    setEditTitle(selectedWorkout.title || "");
     setEditDate(selectedWorkout.occurred_date);
     setIsEditing(true);
   };
@@ -116,6 +127,7 @@ export default function WorkoutsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: selectedWorkoutId,
+          title: editTitle,
           exercises: editExercises,
           date: editDate,
         }),
@@ -193,6 +205,9 @@ export default function WorkoutsPage() {
 
   // Sync selectedWorkoutId when date, workouts, or selectedWorkoutId changes
   useEffect(() => {
+    if (isCreatingNewWorkout) {
+      return;
+    }
     if (workouts.length === 0) {
       setSelectedWorkoutId(null);
       return;
@@ -209,7 +224,7 @@ export default function WorkoutsPage() {
     } else {
       setSelectedWorkoutId(null);
     }
-  }, [date, workouts, selectedWorkoutId]);
+  }, [date, workouts, selectedWorkoutId, isCreatingNewWorkout]);
 
   // Show temporary notification helper
   const showNotice = (type: "success" | "error", message: string) => {
@@ -302,6 +317,7 @@ export default function WorkoutsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: date,
+          title: sessionTitle,
           exercises: finalExercises,
         }),
       });
@@ -309,9 +325,11 @@ export default function WorkoutsPage() {
       if (res.ok) {
         const resData = await res.json();
         showNotice("success", "Workout session saved successfully!");
+        setSessionTitle("");
         setConfiguredExercises([]);
         setCurrentExerciseName("");
         setCurrentSets([]);
+        setIsCreatingNewWorkout(false);
         await loadWorkouts();
         if (resData.workout_id) {
           setSelectedWorkoutId(resData.workout_id);
@@ -442,12 +460,12 @@ export default function WorkoutsPage() {
                 className="mono uc"
                 style={{
                   fontSize: 10,
-                  color: selectedWorkout ? "var(--blue)" : "var(--muted)",
+                  color: selectedWorkout || isCreatingNewWorkout ? "var(--blue)" : "var(--muted)",
                   letterSpacing: "0.18em",
                   marginTop: 4,
                 }}
               >
-                {selectedWorkout ? "WORKOUT RECORDED" : "NO WORKOUT LOGGED"}
+                {isCreatingNewWorkout ? "LOGGING NEW SESSION" : selectedWorkout ? "WORKOUT RECORDED" : "NO WORKOUT LOGGED"}
               </div>
 
               {/* Session Selector Tabs */}
@@ -455,17 +473,21 @@ export default function WorkoutsPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
                   {dayWorkouts.map((w, index) => {
                     const isActive = w.id === selectedWorkoutId;
-                    let timeLabel = `Session ${dayWorkouts.length - index}`;
+                    let timeLabel = w.title || `Session ${dayWorkouts.length - index}`;
                     if (w.created_at) {
                       try {
-                        timeLabel = format(parseISO(w.created_at), "h:mm a");
+                        const createdTime = format(parseISO(w.created_at), "h:mm a");
+                        timeLabel = w.title ? `${w.title} · ${createdTime}` : createdTime;
                       } catch {}
                     }
                     return (
                       <button
                         key={w.id}
                         type="button"
-                        onClick={() => setSelectedWorkoutId(w.id)}
+                        onClick={() => {
+                          setIsCreatingNewWorkout(false);
+                          setSelectedWorkoutId(w.id);
+                        }}
                         style={{
                           background: isActive ? "var(--blue)" : "var(--bg-2)",
                           color: isActive ? "#fffaf0" : "var(--text)",
@@ -485,10 +507,10 @@ export default function WorkoutsPage() {
 
                   <button
                     type="button"
-                    onClick={() => setSelectedWorkoutId(null)}
+                    onClick={beginNewWorkout}
                     style={{
-                      background: !selectedWorkoutId ? "var(--blue)" : "transparent",
-                      color: !selectedWorkoutId ? "#fffaf0" : "var(--blue)",
+                      background: isCreatingNewWorkout ? "var(--blue)" : "transparent",
+                      color: isCreatingNewWorkout ? "#fffaf0" : "var(--blue)",
                       border: `1px dashed var(--blue)`,
                       borderRadius: 6,
                       padding: "6px 12px",
@@ -545,6 +567,29 @@ export default function WorkoutsPage() {
                   
                   {/* Workout Date input */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
+                    <label className="mono uc" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: "0.1em" }}>
+                      Session Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="e.g., Chest, Biceps, Push Day"
+                      maxLength={120}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 6,
+                        border: "1px solid var(--line-strong)",
+                        background: "var(--card)",
+                        color: "var(--text)",
+                        fontSize: 14,
+                        outline: "none",
+                        fontFamily: "var(--sans)",
+                        width: "100%",
+                        boxSizing: "border-box",
+                        marginBottom: 14,
+                      }}
+                    />
                     <label className="mono uc" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: "0.1em" }}>
                       Workout Date
                     </label>
@@ -824,6 +869,12 @@ export default function WorkoutsPage() {
               /* VIEW WORKOUT DETAILS */
               <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
                 <div>
+                  <Eyebrow label="Session Title" color="var(--blue)" />
+                  <h2 style={{ margin: "6px 0 0", fontSize: 20, fontWeight: 800, color: "var(--text)" }}>
+                    {selectedWorkout.title || "Workout Session"}
+                  </h2>
+                </div>
+                <div>
                   <Eyebrow label="Logged Exercises" color="var(--blue)" />
                   <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 12 }}>
                     {groupExercises(selectedWorkout.workout_exercises).map((group, idx) => (
@@ -937,6 +988,28 @@ export default function WorkoutsPage() {
           ) : (
             /* LOG WORKOUT FORM */
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label className="mono uc" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: "0.1em" }}>
+                  Session Title
+                </label>
+                <input
+                  type="text"
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  placeholder="e.g., Chest, Biceps, Push Day"
+                  maxLength={120}
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 6,
+                    border: "1px solid var(--line-strong)",
+                    background: "var(--card)",
+                    color: "var(--text)",
+                    fontSize: 15,
+                    outline: "none",
+                    fontFamily: "var(--sans)",
+                  }}
+                />
+              </div>
               {/* Form Configured So Far */}
               {configuredExercises.length > 0 && (
                 <div>
@@ -1228,6 +1301,7 @@ export default function WorkoutsPage() {
                       key={w.id}
                       type="button"
                       onClick={() => {
+                        setIsCreatingNewWorkout(false);
                         setDate(w.occurred_date);
                         setSelectedWorkoutId(w.id);
                       }}
@@ -1263,7 +1337,7 @@ export default function WorkoutsPage() {
                           width: "100%",
                         }}
                       >
-                        <span>{dateString}</span>
+                        <span>{w.title || "Workout Session"}</span>
                         {w.occurred_date === localIsoDate() && (
                           <span
                             className="mono uc"
@@ -1279,7 +1353,7 @@ export default function WorkoutsPage() {
                         )}
                       </div>
                       <div className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>
-                        {numExercises} {numExercises === 1 ? "exercise" : "exercises"} · {numSets} {numSets === 1 ? "set" : "sets"}
+                        {dateString} · {numExercises} {numExercises === 1 ? "exercise" : "exercises"} · {numSets} {numSets === 1 ? "set" : "sets"}
                       </div>
                     </button>
                   );

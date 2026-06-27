@@ -360,13 +360,25 @@ export async function applyParsedAction(
   if (type === "workout") {
     const workoutDate = (data.date as string) || targetDate;
     const exercises = (data.exercises as RawWorkoutExercise[]) ?? [];
+    const workoutTitle = normalizeWorkoutTitle((data.title || data.muscle_group) as string | undefined, exercises);
     // Insert workout row
-    const { data: wk, error: wkErr } = await dbScope.supabase
+    const insertWorkout = await dbScope.supabase
       .from("workouts")
-      .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate })
+      .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate, title: workoutTitle })
       .select("id")
       .single();
-    if (wkErr) throw new Error(wkErr.message);
+    let wk = insertWorkout.data;
+    let wkErr = insertWorkout.error;
+    if (wkErr && (wkErr.code === "42703" || wkErr.message.includes("schema cache") || wkErr.message.includes("column"))) {
+      const fallbackInsert = await dbScope.supabase
+        .from("workouts")
+        .insert({ owner_user_id: dbScope.ownerUserId, occurred_date: workoutDate })
+        .select("id")
+        .single();
+      wk = fallbackInsert.data;
+      wkErr = fallbackInsert.error;
+    }
+    if (wkErr || !wk) throw new Error(wkErr?.message || "Failed to create workout");
 
     // Insert one row per set per exercise. Weight-only entries are represented
     // with reps = 0 so the exercise is still saved.
@@ -385,7 +397,7 @@ export async function applyParsedAction(
     }
 
     const summary = summarizeWorkoutExercises(exercises);
-    return `Workout logged: ${summary || "no exercises recorded"}`;
+    return `Workout logged: ${workoutTitle}: ${summary || "no exercises recorded"}`;
   }
 
   if (type === "chat") {
@@ -393,6 +405,21 @@ export async function applyParsedAction(
   }
 
   return "I did not save this because generic notes are disabled.";
+}
+
+function normalizeWorkoutTitle(
+  title: string | undefined,
+  exercises: RawWorkoutExercise[]
+) {
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle) return trimmedTitle.slice(0, 120);
+
+  const exerciseNames = exercises
+    .map((exercise) => exercise.name?.trim() ?? "")
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return exerciseNames.length > 0 ? exerciseNames.join(" + ") : "Workout Session";
 }
 
 export async function handleNaturalLanguage(
@@ -530,7 +557,8 @@ export function formatActionPreview(action: ParsedAction): string {
 
   if (type === "workout") {
     const dateLabel = formatDateLabel(data.date as string);
-    return `I parsed a workout${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
+    const title = (data.title || data.muscle_group) as string | undefined;
+    return `I parsed a workout${title ? `: *${title}*` : ""}${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "chat") {
