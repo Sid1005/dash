@@ -1,11 +1,44 @@
 import { NextResponse } from "next/server";
 import { getUserScopedDb, isUnauthorizedError } from "@/lib/owner-scope";
 import type { TaskRow } from "@/lib/tasks-types";
-import type { TicketAgent, TicketImportance, TicketRow, TicketStatus } from "@/lib/tickets-types";
+import type { TicketAgent, TicketImportance, TicketRow, TicketStatus, TicketSubtaskDetails } from "@/lib/tickets-types";
 
 const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw"]);
 const IMPORTANCE = new Set<TicketImportance>(["low", "medium", "high", "urgent"]);
 const STATUSES = new Set<TicketStatus>(["backlog", "now", "done", "archived"]);
+
+function cleanSubtasks(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item: unknown) => String(item).trim()).filter(Boolean)
+    : [];
+}
+
+function cleanSubtaskDetails(value: unknown): TicketSubtaskDetails {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.entries(value as Record<string, unknown>).reduce<TicketSubtaskDetails>((acc, [key, item]) => {
+    if (!key.trim()) return acc;
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const details = typeof (item as { details?: unknown }).details === "string"
+        ? (item as { details: string }).details.trim()
+        : "";
+      acc[key] = details ? { details } : {};
+    }
+    return acc;
+  }, {});
+}
+
+function dueAtOrNull(value: string) {
+  return value && !Number.isNaN(new Date(value).getTime()) ? value : null;
+}
+
+function fallbackTitle(sourceText: string) {
+  const title = sourceText
+    .replace(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)/ig, "")
+    .split(/\n|[.!?]/)
+    .find((chunk) => chunk.trim())
+    ?.trim();
+  return title ? title.slice(0, 2000) : "Untitled ticket";
+}
 
 export async function GET() {
   try {
@@ -31,45 +64,46 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const title = typeof body.title === "string" ? body.title.trim() : "";
-    const dueAt = typeof body.due_at === "string" ? body.due_at : "";
-    const dueLabel = typeof body.due_label === "string" ? body.due_label.trim() : "";
-    const importance = typeof body.importance === "string" ? body.importance : "";
     const sourceText = typeof body.source_text === "string" ? body.source_text : "";
+    const title = typeof body.title === "string" && body.title.trim()
+      ? body.title.trim()
+      : fallbackTitle(sourceText);
+    const dueAt = dueAtOrNull(typeof body.due_at === "string" ? body.due_at : "");
+    const dueLabel = typeof body.due_label === "string" ? body.due_label.trim() : "";
+    const importance = typeof body.importance === "string" && IMPORTANCE.has(body.importance as TicketImportance)
+      ? body.importance as TicketImportance
+      : null;
     const agent = typeof body.agent === "string" && AGENTS.has(body.agent as TicketAgent)
       ? body.agent as TicketAgent
       : null;
-    const subtasks = Array.isArray(body.subtasks)
-      ? body.subtasks.map((item: unknown) => String(item).trim()).filter(Boolean)
-      : [];
-
-    if (!title || !dueAt || !IMPORTANCE.has(importance as TicketImportance) || subtasks.length === 0) {
-      return NextResponse.json(
-        { error: "title, due_at, importance, and subtasks are required" },
-        { status: 400 }
-      );
-    }
+    const subtasks = cleanSubtasks(body.subtasks);
+    const subtaskDetails = cleanSubtaskDetails(body.subtask_details);
 
     const scope = await getUserScopedDb();
-    const { data: task, error: taskError } = await scope.supabase
-      .from("tasks")
-      .insert({ owner_user_id: scope.ownerUserId, title, due_at: dueAt, done: false })
-      .select("*")
-      .single();
+    let task: TaskRow | null = null;
+    if (dueAt) {
+      const { data: taskData, error: taskError } = await scope.supabase
+        .from("tasks")
+        .insert({ owner_user_id: scope.ownerUserId, title, due_at: dueAt, done: false })
+        .select("*")
+        .single();
 
-    if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
+      if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
+      task = taskData as TaskRow;
+    }
 
     const { data: ticket, error: ticketError } = await scope.supabase
       .from("tickets")
       .insert({
         owner_user_id: scope.ownerUserId,
-        task_id: (task as TaskRow).id,
+        task_id: task?.id ?? null,
         title,
         due_at: dueAt,
         due_label: dueLabel,
         horizon: "today",
         importance,
         subtasks,
+        subtask_details: subtaskDetails,
         agent,
         source_text: sourceText,
         status: "backlog",
@@ -80,7 +114,7 @@ export async function POST(req: Request) {
       .single();
 
     if (ticketError) return NextResponse.json({ error: ticketError.message }, { status: 500 });
-    return NextResponse.json({ ticket: ticket as TicketRow, task: task as TaskRow }, { status: 201 });
+    return NextResponse.json({ ticket: ticket as TicketRow, task }, { status: 201 });
   } catch (error) {
     const status = isUnauthorizedError(error) ? 401 : 500;
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -94,9 +128,8 @@ export async function PATCH(req: Request) {
     const id = typeof body.id === "string" ? body.id : "";
     const status = typeof body.status === "string" ? body.status : null;
     const title = typeof body.title === "string" ? body.title.trim() : null;
-    const subtasks = Array.isArray(body.subtasks)
-      ? body.subtasks.map((item: unknown) => String(item).trim()).filter(Boolean)
-      : null;
+    const subtasks = Array.isArray(body.subtasks) ? cleanSubtasks(body.subtasks) : null;
+    const subtaskDetails = body.subtask_details !== undefined ? cleanSubtaskDetails(body.subtask_details) : null;
     const sortOrder = typeof body.sort_order === "number" && Number.isFinite(body.sort_order)
       ? Math.trunc(body.sort_order)
       : 0;
@@ -124,13 +157,14 @@ export async function PATCH(req: Request) {
       if (clearError) return NextResponse.json({ error: clearError.message }, { status: 500 });
     }
 
-    const update: Record<string, string | number | string[]> = {};
+    const update: Record<string, string | number | string[] | TicketSubtaskDetails> = {};
     if (status !== null) {
       update.status = status;
       update.sort_order = sortOrder;
     }
     if (title !== null) update.title = title;
     if (subtasks !== null) update.subtasks = subtasks;
+    if (subtaskDetails !== null) update.subtask_details = subtaskDetails;
 
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: "no changes provided" }, { status: 400 });

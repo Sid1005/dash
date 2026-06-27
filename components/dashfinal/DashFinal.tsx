@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from "lucide-react";
 import { formatINR } from "@/lib/currency";
-import type { TicketRow } from "@/lib/tickets-types";
+import type { TicketRow, TicketSubtaskDetails } from "@/lib/tickets-types";
 import type {
+  ActivityApiRow,
   DashBlock,
   DashData,
   DashFeed,
+  DashLearning,
   DashTask,
   FoodApiRow,
   SpendApiRow,
@@ -19,7 +21,7 @@ import type {
   WorkoutApiRow,
 } from "./types";
 
-export type { DashBlock, DashData, DashTask } from "./types";
+export type { ActivityApiRow, DashBlock, DashData, DashLearning, DashTask } from "./types";
 
 // ── Day timeline ──────────────────────────────────────────────────────────────
 const TL_START = 6 * 60;   // 6:00 AM
@@ -114,6 +116,7 @@ export function useDashData(
   dateOverride?: string,
   refreshTrigger?: number,
   options?: {
+    includeLearnings?: boolean;
     includeTasks?: boolean;
     includeProblems?: boolean;
     includeQuotes?: boolean;
@@ -122,6 +125,7 @@ export function useDashData(
 ): DashData | null {
   const [data, setData] = useState<DashData | null>(null);
 
+  const includeLearnings = options?.includeLearnings ?? true;
   const includeTasks = options?.includeTasks ?? true;
   const includeProblems = options?.includeProblems ?? true;
   const includeQuotes = options?.includeQuotes ?? true;
@@ -132,6 +136,7 @@ export function useDashData(
 
     async function load() {
       const today = dateOverride || localIsoDate();
+      const learningDates = Array.from({ length: 14 }, (_, i) => localIsoDate(subDays(new Date(today), i)));
 
       const dailyResPromise = fetch(`/api/daily?date=${today}`).then((r) => r.json());
 
@@ -142,6 +147,19 @@ export function useDashData(
       const problemsResPromise = includeProblems
         ? fetch("/api/problems").then((r) => r.json()).catch(() => ({ problems: [] }))
         : Promise.resolve({ problems: [] });
+
+      const learningsResPromise = includeLearnings
+        ? fetch(`/api/learnings?startDate=${learningDates[13]}&endDate=${today}`)
+            .then((r) => r.json())
+            .then((j) => {
+              const items = (j.items ?? []) as { id: string; text: string; date: string }[];
+              return learningDates.map((d) => ({
+                date: d,
+                items: items.filter((item) => item.date === d),
+              }));
+            })
+            .catch(() => learningDates.map((d) => ({ date: d, items: [] })))
+        : Promise.resolve([]);
 
       const quotesResPromise = includeQuotes
         ? fetch("/api/quotes").then((r) => r.json()).catch(() => ({ quotes: [] }))
@@ -155,12 +173,14 @@ export function useDashData(
         dailyRes,
         tasksRes,
         problemsRes,
+        learningsRes,
         quotesRes,
         workoutsRes,
       ] = await Promise.all([
         dailyResPromise,
         tasksResPromise,
         problemsResPromise,
+        learningsResPromise,
         quotesResPromise,
         workoutsResPromise,
       ]);
@@ -171,6 +191,7 @@ export function useDashData(
       const food = (dailyRes.food ?? []) as FoodApiRow[];
       const spending = (dailyRes.spending ?? []) as SpendApiRow[];
       const timeBlocks = (dailyRes.time_blocks ?? []) as TimeBlockApiRow[];
+      const activities = (dailyRes.activities ?? []) as ActivityApiRow[];
       const allTasks = (tasksRes.tasks ?? []) as TaskApiRow[];
       const todayWorkouts = ((workoutsRes.workouts ?? []) as WorkoutApiRow[])
         .filter((workout) => workout.occurred_date === today);
@@ -251,6 +272,18 @@ export function useDashData(
         due_at: task.due_at,
       }));
 
+      const learningRows: DashLearning[] = (learningsRes as { date: string; items: { id: string; text: string }[] }[])
+        .flatMap((day) =>
+          day.items.map((item) => ({
+            id: item.id,
+            isoDate: day.date,
+            date: day.date === today ? "today" : format(new Date(`${day.date}T12:00:00`), "MMM d"),
+            text: item.text,
+            tag: "note",
+          }))
+        )
+        .slice(0, 5);
+
       const meals = food.map((f) => ({
         id: f.id,
         t: f.time,
@@ -292,6 +325,12 @@ export function useDashData(
           verb: "logged",
           obj: `${s.item} · ${formatINR(s.amount)}`,
         })),
+        ...activities.map<DashFeed>((a) => ({
+          t: a.time,
+          who: a.actor,
+          verb: a.verb,
+          obj: a.body,
+        })),
       ].sort((a, b) => toMinutes(b.t) - toMinutes(a.t));
 
       setData({
@@ -306,6 +345,8 @@ export function useDashData(
         BLOCKS: blocks,
         TASKS: taskRows,
         DONE_TASKS: doneTaskRows,
+        ACTIVITIES: activities.sort((a, b) => toMinutes(b.time) - toMinutes(a.time)),
+        LEARNINGS: learningRows,
         FEED: feed,
         MEALS: meals,
         SPEND: spend,
@@ -337,7 +378,7 @@ export function useDashData(
     return () => {
       cancelled = true;
     };
-  }, [dateOverride, refreshTrigger, includeTasks, includeProblems, includeQuotes, includeWorkouts]);
+  }, [dateOverride, refreshTrigger, includeLearnings, includeTasks, includeProblems, includeQuotes, includeWorkouts]);
 
   return data;
 }
@@ -428,7 +469,7 @@ const NAV_ITEMS = [
   { id: "workouts", label: "workouts", href: "/workouts" },
 ];
 
-type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "workouts";
+type NavItemId = "cockpit" | "calendar" | "tasks" | "food" | "activities" | "workouts";
 
 function Nav({ active }: { active: NavItemId }) {
   return (
@@ -805,6 +846,23 @@ export function TaskRow({ t, onToggle, onDelete }: { t: DashTask; onToggle?: (ta
   );
 }
 
+export function LearningRow({ l, onDelete }: { l: DashLearning; onDelete?: (learning: DashLearning) => void }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 12, alignItems: "start", padding: "10px 0", borderBottom: "1px dashed var(--line)" }}>
+      <span className="mono" style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
+        {l.date}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.35 }}>{l.text}</div>
+        <div className="mono" style={{ marginTop: 3, fontSize: 9, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {l.tag}
+        </div>
+      </div>
+      {onDelete && <DeleteBtn onClick={() => onDelete(l)} label="Delete learning" />}
+    </div>
+  );
+}
+
 export function MealRow({ m, onDelete }: { m: DashData["MEALS"][number]; onDelete?: (m: DashData["MEALS"][number]) => void }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "56px 1fr 64px 50px 24px", gap: 14, alignItems: "center", padding: "12px 0", borderBottom: "1px dashed var(--line)", fontSize: 14 }}>
@@ -927,11 +985,14 @@ const AGENT_LABELS: Record<CockpitAgent, string> = {
   openclaw: "OpenClaw",
 };
 
+const COCKPIT_BLUE = "#7dd3fc";
+const COCKPIT_GREEN = "#86efac";
+
 const AGENT_COLORS: Record<CockpitAgent, string> = {
-  codex: "#7dd3fc",
-  claude: "#c4b5fd",
-  hermes: "#fdba74",
-  openclaw: "#86efac",
+  codex: COCKPIT_BLUE,
+  claude: COCKPIT_GREEN,
+  hermes: COCKPIT_BLUE,
+  openclaw: COCKPIT_GREEN,
 };
 
 const IMPORTANCE_LABELS: Record<CockpitImportance, string> = {
@@ -947,6 +1008,20 @@ function titleCaseText(value: string) {
     .replace(/[.!?]+$/g, "")
     .replace(/\s+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function ticketDueText(ticket: TicketRow) {
+  if (ticket.due_label) return ticket.due_label;
+  if (ticket.due_at) return dueLabel(ticket.due_at);
+  return "No due date";
+}
+
+function ticketImportanceText(ticket: TicketRow) {
+  return ticket.importance ? IMPORTANCE_LABELS[ticket.importance] : "No priority";
+}
+
+function ticketSubtaskDetails(ticket: TicketRow): TicketSubtaskDetails {
+  return ticket.subtask_details ?? {};
 }
 
 function localDueAt(daysFromToday: number) {
@@ -1027,7 +1102,7 @@ function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): C
 
 function CockpitCard({
   eyebrow,
-  tone = "#fef08a",
+  tone = COCKPIT_BLUE,
   className = "",
   children,
 }: {
@@ -1111,7 +1186,7 @@ function AgentQuickTags({
         type="button"
         onClick={() => onSelect(null)}
         className="agent-quick-tag mono"
-        style={{ background: selectedAgent === null ? "#fef08a" : "#ffffff" }}
+        style={{ background: selectedAgent === null ? COCKPIT_GREEN : "#ffffff" }}
       >
         No agent
       </button>
@@ -1132,21 +1207,34 @@ function AgentQuickTags({
 
 function TicketCard({
   ticket,
+  placement = "saved",
   onMove,
   onEdit,
   onAddSubtask,
+  onUpdateSubtaskDetails,
   onDelete,
 }: {
   ticket: TicketRow;
+  placement?: "saved" | "now";
   onMove: (id: string, status: "backlog" | "now") => void;
   onEdit: (id: string, title: string) => Promise<void>;
   onAddSubtask: (id: string, subtask: string) => Promise<void>;
+  onUpdateSubtaskDetails: (id: string, details: TicketSubtaskDetails) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(ticket.title);
   const [newSubtask, setNewSubtask] = useState("");
+  const [detailDrafts, setDetailDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const details = ticketSubtaskDetails(ticket);
+    setDetailDrafts(ticket.subtasks.reduce<Record<string, string>>((acc, subtask) => {
+      acc[subtask] = details[subtask]?.details ?? "";
+      return acc;
+    }, {}));
+  }, [ticket]);
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1171,15 +1259,29 @@ function TicketCard({
     }
   };
 
+  const saveSubtaskDetails = async (subtask: string) => {
+    const nextDetails = {
+      ...ticketSubtaskDetails(ticket),
+      [subtask]: { details: (detailDrafts[subtask] ?? "").trim() },
+    };
+    setBusy(true);
+    try {
+      await onUpdateSubtaskDetails(ticket.id, nextDetails);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <article
-      className="saved-ticket-card"
-      draggable
+      className={`saved-ticket-card ${placement === "now" ? "now-ticket-card" : ""}`.trim()}
+      draggable={placement === "saved"}
       onDragStart={(event) => event.dataTransfer.setData("text/plain", ticket.id)}
     >
       <div className="cockpit-meta">
-        <span>{ticket.due_label || dueLabel(ticket.due_at)}</span>
-        <span>{IMPORTANCE_LABELS[ticket.importance]}</span>
+        <span className="ticket-kind-badge">ticket</span>
+        <span>{ticketDueText(ticket)}</span>
+        <span>{ticketImportanceText(ticket)}</span>
       </div>
       {editing ? (
         <div className="saved-ticket-edit">
@@ -1208,8 +1310,28 @@ function TicketCard({
         <h2>{ticket.title}</h2>
       )}
       <div className="saved-ticket-subtasks">
-        {ticket.subtasks.slice(0, 5).map((subtask) => (
-          <span key={subtask}>{subtask}</span>
+        {ticket.subtasks.length === 0 && <div className="subtask-empty">No subtasks yet.</div>}
+        {ticket.subtasks.map((subtask) => (
+          <article className="subtask-mini-card" key={subtask}>
+            <div className="subtask-mini-header">
+              <span className="subtask-kind-badge">subtask</span>
+              <strong>{subtask}</strong>
+            </div>
+            <textarea
+              value={detailDrafts[subtask] ?? ""}
+              onChange={(event) => setDetailDrafts((current) => ({ ...current, [subtask]: event.target.value }))}
+              onBlur={() => void saveSubtaskDetails(subtask)}
+              placeholder="Details..."
+            />
+            <button
+              type="button"
+              className="ticket-move-button mono"
+              disabled={busy}
+              onClick={() => void saveSubtaskDetails(subtask)}
+            >
+              Save detail
+            </button>
+          </article>
         ))}
       </div>
       <div className="saved-ticket-add-subtask">
@@ -1233,7 +1355,7 @@ function TicketCard({
       <div className="saved-ticket-footer">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {ticket.agent && <MiniPill tone={AGENT_COLORS[ticket.agent]}>@{AGENT_LABELS[ticket.agent]}</MiniPill>}
-          <MiniPill tone={ticket.status === "now" ? "#fef08a" : "#ffffff"}>{ticket.status}</MiniPill>
+          <MiniPill tone={ticket.status === "now" ? COCKPIT_GREEN : "#ffffff"}>{ticket.status}</MiniPill>
         </div>
         <div className="saved-ticket-actions">
           <button
@@ -1335,25 +1457,6 @@ export function CockpitPage() {
   const nowTickets = tickets.filter((ticket) => ticket.status === "now");
   const backlogTickets = tickets.filter((ticket) => ticket.status === "backlog");
 
-  const nowItems = [
-    {
-      actor: "me",
-      state: "front of mind",
-      title: activeTask?.title ?? "Choose the next visible piece of work",
-      pill: activeTask ? `${activeTask.weight} task` : "all clear",
-      detail: activeTask ? `due ${activeTask.due || "soon"}` : "human focus",
-      tone: "#fef08a",
-    },
-    ...nowTickets.map((ticket) => ({
-      actor: ticket.agent ? AGENT_LABELS[ticket.agent].toLowerCase() : "ticket",
-      state: "now",
-      title: ticket.title,
-      pill: ticket.agent ? `@${AGENT_LABELS[ticket.agent]}` : "no agent",
-      detail: ticket.due_label || dueLabel(ticket.due_at),
-      tone: ticket.agent ? AGENT_COLORS[ticket.agent] : "#86efac",
-    })),
-  ];
-
   const selectAgent = (agent: CockpitAgent | null) => {
     setSelectedAgent(agent);
     const nextText = ticketText.replace(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)\s*/ig, "").trim();
@@ -1418,6 +1521,23 @@ export function CockpitPage() {
     }
   };
 
+  const updateTicketSubtaskDetails = async (id: string, subtaskDetails: TicketSubtaskDetails) => {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, subtask_details: subtaskDetails } : ticket));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, subtask_details: subtaskDetails }),
+      });
+      if (!response.ok) throw new Error("Could not update subtask details");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+      throw new Error("Could not update subtask details");
+    }
+  };
+
   const deleteTicket = async (id: string) => {
     const previous = tickets;
     setTickets((current) => current.filter((ticket) => ticket.id !== id));
@@ -1434,7 +1554,7 @@ export function CockpitPage() {
   };
 
   const persistTicket = async (withAgent: boolean) => {
-    if (!draft.title || !draft.dueAt) return;
+    if (!ticketText.trim() && !draft.title) return;
     setSaveState("saving");
     try {
       const response = await fetch("/api/tickets", {
@@ -1446,6 +1566,7 @@ export function CockpitPage() {
           due_label: draft.dueDate,
           importance: draft.importance,
           subtasks: draft.subtasks,
+          subtask_details: {},
           agent: withAgent ? draft.agent ?? null : null,
           source_text: ticketText,
         }),
@@ -1459,7 +1580,7 @@ export function CockpitPage() {
     }
   };
 
-  const canCreate = Boolean(draft.title && draft.dueAt && draft.importance && draft.subtasks.length);
+  const canSave = Boolean(ticketText.trim() || draft.title);
 
   return (
     <div className="cockpit-page">
@@ -1467,9 +1588,8 @@ export function CockpitPage() {
 
       <main className="cockpit-demo-shell">
         <div className="cockpit-demo-grid">
-          <CockpitCard eyebrow="01 - now" tone="#7dd3fc" className="cockpit-now-card cockpit-primary-card">
-            <h1 className="cockpit-card-title">Now</h1>
-            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+          <CockpitCard eyebrow="01 - now" tone={COCKPIT_BLUE} className="cockpit-now-card cockpit-primary-card">
+            <div className="now-scroll-list">
               <div
                 className="now-drop-zone"
                 onDragOver={(event) => event.preventDefault()}
@@ -1480,60 +1600,70 @@ export function CockpitPage() {
               >
                 Drop saved ticket here
               </div>
-              {nowItems.map((item) => (
-                <article className="now-item" key={`${item.actor}-${item.title}`} style={{ boxShadow: item.actor === "me" ? "none" : `inset 10px 0 0 ${item.tone}` }}>
-                  <div className="cockpit-meta">
-                    <span>{item.actor}</span>
-                    <span>{item.state}</span>
-                  </div>
-                  <h2>{item.title}</h2>
-                  <div className="cockpit-meta">
-                    <MiniPill tone={item.tone}>{item.pill}</MiniPill>
-                    <span>{item.detail}</span>
-                  </div>
-                </article>
+              <article className="now-item">
+                <div className="cockpit-meta">
+                  <span className="ticket-kind-badge">task</span>
+                  <span>{activeTask ? "front of mind" : "human focus"}</span>
+                </div>
+                <h2>{activeTask?.title ?? "Choose the next visible piece of work"}</h2>
+                <div className="cockpit-meta">
+                  <MiniPill tone={COCKPIT_BLUE}>{activeTask ? `${activeTask.weight} task` : "all clear"}</MiniPill>
+                  <span>{activeTask ? `due ${activeTask.due || "soon"}` : "no active task"}</span>
+                </div>
+              </article>
+              {nowTickets.map((ticket) => (
+                <TicketCard
+                  key={ticket.id}
+                  ticket={ticket}
+                  placement="now"
+                  onMove={moveTicket}
+                  onEdit={editTicket}
+                  onAddSubtask={addTicketSubtask}
+                  onUpdateSubtaskDetails={updateTicketSubtaskDetails}
+                  onDelete={deleteTicket}
+                />
               ))}
             </div>
           </CockpitCard>
 
-          <CockpitCard eyebrow="02 - create ticket" tone="#f9a8d4" className="cockpit-ticket-card cockpit-primary-card">
-            <h1 className="cockpit-card-title">Create ticket</h1>
+          <CockpitCard eyebrow="02 - create ticket" tone={COCKPIT_GREEN} className="cockpit-ticket-card cockpit-primary-card">
+            <div className="ticket-compose-stack">
+              <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
 
-            <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
+              <textarea
+                value={ticketText}
+                onChange={(event) => {
+                  setTicketText(event.target.value);
+                  setSaveState("idle");
+                }}
+                className="ticket-composer"
+                aria-label="Ticket composer"
+              />
 
-            <textarea
-              value={ticketText}
-              onChange={(event) => {
-                setTicketText(event.target.value);
-                setSaveState("idle");
-              }}
-              className="ticket-composer"
-              aria-label="Ticket composer"
-            />
+              <RequiredFieldChips draft={draft} />
 
-            <RequiredFieldChips draft={draft} />
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-              <button
-                type="button"
-                className="cockpit-action-button mono"
-                disabled={!canCreate || !draft.agent || saveState === "saving"}
-                onClick={() => void persistTicket(true)}
-              >
-                {saveState === "saving" ? "Saving..." : "Create ticket + start agent"}
-              </button>
-              <button
-                type="button"
-                className="cockpit-action-button secondary mono"
-                disabled={!canCreate || saveState === "saving"}
-                onClick={() => void persistTicket(false)}
-              >
-                {saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Save ticket only"}
-              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button
+                  type="button"
+                  className="cockpit-action-button mono"
+                  disabled={!canSave || !draft.agent || saveState === "saving"}
+                  onClick={() => void persistTicket(true)}
+                >
+                  {saveState === "saving" ? "Saving..." : "Create ticket + start agent"}
+                </button>
+                <button
+                  type="button"
+                  className="cockpit-action-button secondary mono"
+                  disabled={!canSave || saveState === "saving"}
+                  onClick={() => void persistTicket(false)}
+                >
+                  {saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "Save ticket only"}
+                </button>
+              </div>
             </div>
           </CockpitCard>
 
-          <CockpitCard eyebrow="03 - saved tickets" tone="#fdba74" className="cockpit-lower-grid saved-tickets-board">
+          <CockpitCard eyebrow="03 - saved tickets" tone={COCKPIT_BLUE} className="cockpit-lower-grid saved-tickets-board">
             <div className="saved-ticket-header">
               <div>
                 <h1 className="cockpit-card-title">Saved tickets</h1>
@@ -1553,6 +1683,7 @@ export function CockpitPage() {
                     onMove={moveTicket}
                     onEdit={editTicket}
                     onAddSubtask={addTicketSubtask}
+                    onUpdateSubtaskDetails={updateTicketSubtaskDetails}
                     onDelete={deleteTicket}
                   />
                 ))}
