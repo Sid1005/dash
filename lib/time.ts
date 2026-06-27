@@ -1,4 +1,5 @@
 const IST_TIME_ZONE = "Asia/Kolkata";
+export const IST_OFFSET = "+05:30";
 
 function istParts(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {

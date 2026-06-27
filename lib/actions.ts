@@ -9,7 +9,7 @@ import { insertFoodEntry } from "./food-supabase";
 import { type DbScope, getUserScopedDb } from "./owner-scope";
 import { parseInput, type ParsedAction } from "./parse";
 import { currentIstDate } from "./time";
-import { notifyHermesTaskUpsert } from "./hermes-reminders";
+import { notifyHermesTaskUpsert, notifyHermesEventUpsert, notifyHermesEventCancel } from "./hermes-reminders";
 import type { TaskRow } from "./tasks-types";
 import { isSpendCategory } from "./spending";
 import { formatINR } from "./currency";
@@ -276,12 +276,13 @@ export async function applyParsedAction(
     const endTime = String(data.end || defaultEnd?.end);
     const endDate = String(data.end_date || defaultEnd?.endDate || eventDate);
     if (endDate !== eventDate) throw new Error("Dash schedule blocks must start and end on the same day.");
-    await insertTimeBlock(eventDate, {
+    const createdBlock = await insertTimeBlock(eventDate, {
       activity: String(data.title),
       start: String(data.start),
       end: endTime,
       category: "Other",
     }, dbScope);
+    after(() => notifyHermesEventUpsert(createdBlock));
     return `Event created: "${data.title}" on ${eventDate}, ${data.start}–${endTime}`;
   }
 
@@ -309,18 +310,21 @@ export async function applyParsedAction(
       throw new Error("Updated calendar event end must be after its start.");
     }
 
-    await updateTimeBlock(String(event.event_id), {
+    const updatedBlock = await updateTimeBlock(String(event.event_id), {
       activity: typeof event.new_title === "string" ? event.new_title : undefined,
       date: nextDate,
       start,
       end,
     }, dbScope);
+    after(() => notifyHermesEventUpsert(updatedBlock));
     return `Event updated: "${event.new_title || event.current_title}"`;
   }
 
   if (type === "calendar_event_delete") {
     const event = (await prepareParsedAction(action, targetDate, dbScope)).data;
-    await deleteTimeBlock(String(event.event_id), dbScope);
+    const deletedId = String(event.event_id);
+    await deleteTimeBlock(deletedId, dbScope);
+    after(() => notifyHermesEventCancel(deletedId));
     return `Event deleted: "${event.current_title}"`;
   }
 

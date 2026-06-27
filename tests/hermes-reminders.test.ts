@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { notifyHermesTaskCancel, notifyHermesTaskUpsert } from "../lib/hermes-reminders";
+import { notifyHermesTaskCancel, notifyHermesTaskUpsert, notifyHermesEventUpsert, notifyHermesEventCancel } from "../lib/hermes-reminders";
 
 describe("Hermes reminder delivery", () => {
   beforeEach(() => {
@@ -70,5 +70,68 @@ describe("Hermes reminder delivery", () => {
         body: JSON.stringify({ event: "cancel", task_id: "task-3" }),
       })
     );
+  });
+
+  it("sends an event upsert with ISO start_at in IST", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyHermesEventUpsert({
+      id: "event-1",
+      date: "2026-06-27",
+      start: "09:30",
+      activity: "Team standup",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://hermes.example/dash/reminder",
+      expect.objectContaining({
+        body: JSON.stringify({
+          event: "upsert",
+          event_id: "event-1",
+          title: "Team standup",
+          start_at: "2026-06-27T09:30:00+05:30",
+        }),
+      })
+    );
+  });
+
+  it("sends an event cancel with event_id", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyHermesEventCancel("event-2");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://hermes.example/dash/reminder",
+      expect.objectContaining({
+        body: JSON.stringify({ event: "cancel", event_id: "event-2" }),
+      })
+    );
+  });
+
+  it("skips event upsert when webhook URL is not set", async () => {
+    vi.stubEnv("HERMES_REMINDER_WEBHOOK_URL", "");
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyHermesEventUpsert({
+      id: "event-3",
+      date: "2026-06-27",
+      start: "10:00",
+      activity: "Focus block",
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("skips event cancel when webhook URL is not set", async () => {
+    vi.stubEnv("HERMES_REMINDER_WEBHOOK_URL", "");
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await notifyHermesEventCancel("event-4");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
