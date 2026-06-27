@@ -1,5 +1,5 @@
-import { TasksLearningPage } from "@/components/dashfinal/TasksLearningPage";
+import { PlannerPage } from "@/components/dashfinal/PlannerPage";
 
 export default function TasksPage() {
-  return <TasksLearningPage />;
+  return <PlannerPage />;
 }

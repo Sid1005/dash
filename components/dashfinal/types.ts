@@ -46,16 +46,6 @@ export type WorkoutApiRow = {
   workout_exercises: WorkoutExerciseApiRow[];
 };
 
-export type ActivityApiRow = {
-  id: string;
-  date: string;
-  time: string;
-  actor: "telegram" | "agent" | "calendar" | "system" | "user";
-  kind: "note" | "activity" | "agent_event";
-  verb: string;
-  body: string;
-};
-
 export type DashBlock = {
   id?: string;
   kind: "blk" | "cal" | "meal";
@@ -79,14 +69,6 @@ export type DashTask = {
   context: string;
   done: boolean;
   due_at: string;
-};
-
-export type DashLearning = {
-  id: string;
-  isoDate: string;
-  date: string;
-  text: string;
-  tag: string;
 };
 
 export type QuoteRow = {
@@ -113,8 +95,6 @@ export type DashData = {
   BLOCKS: DashBlock[];
   TASKS: DashTask[];
   DONE_TASKS: DashTask[];
-  ACTIVITIES: ActivityApiRow[];
-  LEARNINGS: DashLearning[];
   FEED: DashFeed[];
   MEALS: { id: string; t: string; label: string; kcal: number; p: number; cost: number; est?: boolean; planned?: boolean }[];
   SPEND: { id: string; t: string; label: string; amount: number; cat: string; est?: boolean }[];

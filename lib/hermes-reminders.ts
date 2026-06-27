@@ -1,4 +1,5 @@
 import type { TaskRow } from "@/lib/tasks-types";
+import type { TimeBlockEntry } from "@/lib/time-blocks-supabase";
 
 type ReminderEvent =
   | {
@@ -10,6 +11,16 @@ type ReminderEvent =
   | {
       event: "cancel";
       task_id: string;
+    }
+  | {
+      event: "upsert";
+      event_id: string;
+      title: string;
+      start_at: string;
+    }
+  | {
+      event: "cancel";
+      event_id: string;
     };
 
 const WEBHOOK_TIMEOUT_MS = 4_000;
@@ -91,5 +102,23 @@ export async function notifyHermesTaskCancel(taskId: string): Promise<void> {
   await postHermesReminder({
     event: "cancel",
     task_id: taskId,
+  });
+}
+
+export async function notifyHermesEventUpsert(
+  block: Pick<TimeBlockEntry, "id" | "date" | "start" | "activity">
+): Promise<void> {
+  await postHermesReminder({
+    event: "upsert",
+    event_id: block.id,
+    title: block.activity,
+    start_at: `${block.date}T${block.start}:00+05:30`,
+  });
+}
+
+export async function notifyHermesEventCancel(eventId: string): Promise<void> {
+  await postHermesReminder({
+    event: "cancel",
+    event_id: eventId,
   });
 }
