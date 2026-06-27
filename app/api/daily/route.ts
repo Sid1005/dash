@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { type FoodEntry } from "@/lib/types";
 import {
   deleteFoodEntry,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/spending-supabase";
 import { currentIstDate } from "@/lib/time";
 import { getUserScopedDb } from "@/lib/owner-scope";
+import { notifyHermesEventUpsert, notifyHermesEventCancel } from "@/lib/hermes-reminders";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date") ?? currentIstDate();
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
   }
   if (type === "time_block") {
     const block = await insertTimeBlock(d, data, scope);
+    after(() => notifyHermesEventUpsert(block));
     return NextResponse.json({ ok: true, time_block: block });
   }
   if (type === "activity") {
@@ -89,6 +91,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
     await deleteTimeBlock(blockId, scope);
+    after(() => notifyHermesEventCancel(blockId));
     return NextResponse.json({ ok: true });
   }
 
