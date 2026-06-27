@@ -19,7 +19,6 @@ export function FoodSpendingPage() {
   const [date, setDate] = useState(() => localIsoDate());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const data = useDashData(date, refreshTrigger, {
-    includeLearnings: false,
     includeTasks: false,
     includeProblems: false,
     includeQuotes: false,

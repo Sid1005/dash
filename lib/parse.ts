@@ -325,21 +325,6 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "log_learning",
-      description: "Log a newly learned lesson or fact.",
-      parameters: {
-        type: "object",
-        properties: {
-          text: { type: "string", description: "What was learned." },
-          date: { type: "string", description: "YYYY-MM-DD format if specified, otherwise omit." }
-        },
-        required: ["text"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "log_idea",
       description: "Log a new idea (a problem to work on, something interesting to build, change in company, or something to work on).",
       parameters: {
@@ -393,7 +378,6 @@ export interface ParsedAction {
     | "calendar_event_delete"
     | "task"
     | "tasks"
-    | "learning"
     | "idea"
     | "workout"
     | "chat"
@@ -531,8 +515,6 @@ If the user's input is a completely new command, ignore the pending action and p
         return { type: "task", data: args };
       case "add_tasks":
         return { type: "tasks", data: args };
-      case "log_learning":
-        return { type: "learning", data: args };
       case "log_idea":
         return { type: "idea", data: args };
       case "log_problem":
