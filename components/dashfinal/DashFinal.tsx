@@ -986,13 +986,12 @@ const AGENT_LABELS: Record<CockpitAgent, string> = {
 };
 
 const COCKPIT_BLUE = "#7dd3fc";
-const COCKPIT_GREEN = "#86efac";
 
 const AGENT_COLORS: Record<CockpitAgent, string> = {
   codex: COCKPIT_BLUE,
-  claude: COCKPIT_GREEN,
+  claude: COCKPIT_BLUE,
   hermes: COCKPIT_BLUE,
-  openclaw: COCKPIT_GREEN,
+  openclaw: COCKPIT_BLUE,
 };
 
 const IMPORTANCE_LABELS: Record<CockpitImportance, string> = {
@@ -1186,7 +1185,7 @@ function AgentQuickTags({
         type="button"
         onClick={() => onSelect(null)}
         className="agent-quick-tag mono"
-        style={{ background: selectedAgent === null ? COCKPIT_GREEN : "#ffffff" }}
+        style={{ background: selectedAgent === null ? COCKPIT_BLUE : "#ffffff" }}
       >
         No agent
       </button>
@@ -1205,13 +1204,140 @@ function AgentQuickTags({
   );
 }
 
+function subtaskStatus(ticket: TicketRow, subtask: string) {
+  return ticketSubtaskDetails(ticket)[subtask]?.status ?? "backlog";
+}
+
+function subtaskDetailText(ticket: TicketRow, subtask: string) {
+  return ticketSubtaskDetails(ticket)[subtask]?.details?.trim() ?? "";
+}
+
+function SubtaskMiniCard({
+  ticket,
+  subtask,
+  compact = false,
+  onMoveSubtask,
+  onUpdateSubtask,
+  onDeleteSubtask,
+}: {
+  ticket: TicketRow;
+  subtask: string;
+  compact?: boolean;
+  onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
+  onUpdateSubtask: (id: string, oldSubtask: string, nextSubtask: string, details: string) => Promise<void>;
+  onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
+}) {
+  const [titleDraft, setTitleDraft] = useState(subtask);
+  const [detailDraft, setDetailDraft] = useState(subtaskDetailText(ticket, subtask));
+  const [busy, setBusy] = useState(false);
+  const status = subtaskStatus(ticket, subtask);
+  const details = subtaskDetailText(ticket, subtask);
+
+  useEffect(() => {
+    setTitleDraft(subtask);
+    setDetailDraft(subtaskDetailText(ticket, subtask));
+  }, [ticket, subtask]);
+
+  const saveSubtask = async () => {
+    const nextTitle = titleCaseText(titleDraft);
+    if (!nextTitle) return;
+    setBusy(true);
+    try {
+      await onUpdateSubtask(ticket.id, subtask, nextTitle, detailDraft.trim());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <article
+      className={`subtask-mini-card ${compact ? "compact" : ""}`.trim()}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData("application/dash-subtask", JSON.stringify({ ticketId: ticket.id, subtask }));
+        event.dataTransfer.setData("text/plain", `subtask:${ticket.id}:${subtask}`);
+      }}
+      tabIndex={0}
+    >
+      <div className="subtask-mini-row">
+        <span className="subtask-kind-badge">subtask</span>
+        <strong>{subtask}</strong>
+        {details && <span className="subtask-summary">{details}</span>}
+      </div>
+      <div className="subtask-hover-panel">
+        <div className="subtask-parent-title">{ticket.title}</div>
+        <input
+          value={titleDraft}
+          onChange={(event) => setTitleDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void saveSubtask();
+          }}
+          aria-label="Subtask title"
+        />
+        <textarea
+          value={detailDraft}
+          onChange={(event) => setDetailDraft(event.target.value)}
+          placeholder="Details..."
+          aria-label="Subtask details"
+        />
+        <div className="subtask-actions">
+          <button type="button" className="ticket-move-button mono" disabled={busy} onClick={() => void saveSubtask()}>
+            Update
+          </button>
+          <button
+            type="button"
+            className="ticket-move-button mono"
+            disabled={busy}
+            onClick={() => void onMoveSubtask(ticket.id, subtask, status === "now" ? "backlog" : "now")}
+          >
+            {status === "now" ? "Backlog" : "To now"}
+          </button>
+          <button type="button" className="ticket-move-button danger mono" disabled={busy} onClick={() => void onDeleteSubtask(ticket.id, subtask)}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function NowSubtaskCard({
+  ticket,
+  subtask,
+  onMoveSubtask,
+  onUpdateSubtask,
+  onDeleteSubtask,
+}: {
+  ticket: TicketRow;
+  subtask: string;
+  onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
+  onUpdateSubtask: (id: string, oldSubtask: string, nextSubtask: string, details: string) => Promise<void>;
+  onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
+}) {
+  return (
+    <article className="saved-ticket-card now-ticket-card">
+      <div className="now-subtask-parent mono">{ticket.title}</div>
+      <SubtaskMiniCard
+        ticket={ticket}
+        subtask={subtask}
+        compact
+        onMoveSubtask={onMoveSubtask}
+        onUpdateSubtask={onUpdateSubtask}
+        onDeleteSubtask={onDeleteSubtask}
+      />
+    </article>
+  );
+}
+
 function TicketCard({
   ticket,
   placement = "saved",
   onMove,
   onEdit,
   onAddSubtask,
-  onUpdateSubtaskDetails,
+  onMoveSubtask,
+  onUpdateSubtask,
+  onDeleteSubtask,
   onDelete,
 }: {
   ticket: TicketRow;
@@ -1219,22 +1345,18 @@ function TicketCard({
   onMove: (id: string, status: "backlog" | "now") => void;
   onEdit: (id: string, title: string) => Promise<void>;
   onAddSubtask: (id: string, subtask: string) => Promise<void>;
-  onUpdateSubtaskDetails: (id: string, details: TicketSubtaskDetails) => Promise<void>;
+  onMoveSubtask: (id: string, subtask: string, status: "backlog" | "now") => Promise<void>;
+  onUpdateSubtask: (id: string, oldSubtask: string, nextSubtask: string, details: string) => Promise<void>;
+  onDeleteSubtask: (id: string, subtask: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(ticket.title);
   const [newSubtask, setNewSubtask] = useState("");
-  const [detailDrafts, setDetailDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const details = ticketSubtaskDetails(ticket);
-    setDetailDrafts(ticket.subtasks.reduce<Record<string, string>>((acc, subtask) => {
-      acc[subtask] = details[subtask]?.details ?? "";
-      return acc;
-    }, {}));
-  }, [ticket]);
+  const visibleSubtasks = placement === "saved"
+    ? ticket.subtasks
+    : ticket.subtasks.filter((subtask) => subtaskStatus(ticket, subtask) === "backlog");
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1259,29 +1381,15 @@ function TicketCard({
     }
   };
 
-  const saveSubtaskDetails = async (subtask: string) => {
-    const nextDetails = {
-      ...ticketSubtaskDetails(ticket),
-      [subtask]: { details: (detailDrafts[subtask] ?? "").trim() },
-    };
-    setBusy(true);
-    try {
-      await onUpdateSubtaskDetails(ticket.id, nextDetails);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <article
       className={`saved-ticket-card ${placement === "now" ? "now-ticket-card" : ""}`.trim()}
       draggable={placement === "saved"}
       onDragStart={(event) => event.dataTransfer.setData("text/plain", ticket.id)}
     >
-      <div className="cockpit-meta">
-        <span className="ticket-kind-badge">ticket</span>
-        <span>{ticketDueText(ticket)}</span>
-        <span>{ticketImportanceText(ticket)}</span>
+      <div className="ticket-title-strip">
+        <span>Ticket</span>
+        <strong>{ticket.title}</strong>
       </div>
       {editing ? (
         <div className="saved-ticket-edit">
@@ -1306,32 +1414,30 @@ function TicketCard({
             </button>
           </div>
         </div>
+      ) : placement === "saved" ? (
+        <div className="ticket-compact-summary">
+          <span>{ticketDueText(ticket)}</span>
+          <span>{ticketImportanceText(ticket)}</span>
+          <span>{ticket.subtasks.length} subtasks</span>
+        </div>
       ) : (
-        <h2>{ticket.title}</h2>
+        <div className="ticket-compact-summary">
+          <span>{ticketDueText(ticket)}</span>
+          <span>{ticketImportanceText(ticket)}</span>
+        </div>
       )}
       <div className="saved-ticket-subtasks">
-        {ticket.subtasks.length === 0 && <div className="subtask-empty">No subtasks yet.</div>}
-        {ticket.subtasks.map((subtask) => (
-          <article className="subtask-mini-card" key={subtask}>
-            <div className="subtask-mini-header">
-              <span className="subtask-kind-badge">subtask</span>
-              <strong>{subtask}</strong>
-            </div>
-            <textarea
-              value={detailDrafts[subtask] ?? ""}
-              onChange={(event) => setDetailDrafts((current) => ({ ...current, [subtask]: event.target.value }))}
-              onBlur={() => void saveSubtaskDetails(subtask)}
-              placeholder="Details..."
-            />
-            <button
-              type="button"
-              className="ticket-move-button mono"
-              disabled={busy}
-              onClick={() => void saveSubtaskDetails(subtask)}
-            >
-              Save detail
-            </button>
-          </article>
+        {visibleSubtasks.length === 0 && <div className="subtask-empty">No subtasks here.</div>}
+        {visibleSubtasks.map((subtask) => (
+          <SubtaskMiniCard
+            key={subtask}
+            ticket={ticket}
+            subtask={subtask}
+            compact={placement === "now"}
+            onMoveSubtask={onMoveSubtask}
+            onUpdateSubtask={onUpdateSubtask}
+            onDeleteSubtask={onDeleteSubtask}
+          />
         ))}
       </div>
       <div className="saved-ticket-add-subtask">
@@ -1355,7 +1461,7 @@ function TicketCard({
       <div className="saved-ticket-footer">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {ticket.agent && <MiniPill tone={AGENT_COLORS[ticket.agent]}>@{AGENT_LABELS[ticket.agent]}</MiniPill>}
-          <MiniPill tone={ticket.status === "now" ? COCKPIT_GREEN : "#ffffff"}>{ticket.status}</MiniPill>
+          <MiniPill tone={ticket.status === "now" ? COCKPIT_BLUE : "#ffffff"}>{ticket.status}</MiniPill>
         </div>
         <div className="saved-ticket-actions">
           <button
@@ -1456,6 +1562,11 @@ export function CockpitPage() {
   const activeTask = data.TASKS.find((task) => !task.done);
   const nowTickets = tickets.filter((ticket) => ticket.status === "now");
   const backlogTickets = tickets.filter((ticket) => ticket.status === "backlog");
+  const nowSubtasks = tickets.flatMap((ticket) => (
+    ticket.subtasks
+      .filter((subtask) => subtaskStatus(ticket, subtask) === "now")
+      .map((subtask) => ({ ticket, subtask }))
+  ));
 
   const selectAgent = (agent: CockpitAgent | null) => {
     setSelectedAgent(agent);
@@ -1538,6 +1649,55 @@ export function CockpitPage() {
     }
   };
 
+  const updateTicketSubtasks = async (id: string, subtasks: string[], subtaskDetails: TicketSubtaskDetails) => {
+    const previous = tickets;
+    setTickets((current) => current.map((ticket) => ticket.id === id ? { ...ticket, subtasks, subtask_details: subtaskDetails } : ticket));
+    try {
+      const response = await fetch("/api/tickets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, subtasks, subtask_details: subtaskDetails }),
+      });
+      if (!response.ok) throw new Error("Could not update subtasks");
+      void loadTickets();
+    } catch {
+      setTickets(previous);
+      throw new Error("Could not update subtasks");
+    }
+  };
+
+  const moveTicketSubtask = async (id: string, subtask: string, status: "backlog" | "now") => {
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target || !target.subtasks.includes(subtask)) return;
+    const details = ticketSubtaskDetails(target);
+    await updateTicketSubtaskDetails(id, {
+      ...details,
+      [subtask]: { ...details[subtask], status },
+    });
+  };
+
+  const editTicketSubtask = async (id: string, oldSubtask: string, nextSubtask: string, details: string) => {
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target) return;
+    const cleanTitle = titleCaseText(nextSubtask);
+    if (!cleanTitle) return;
+    const currentDetails = ticketSubtaskDetails(target);
+    const renamedDetails = { ...currentDetails };
+    const existing = renamedDetails[oldSubtask] ?? {};
+    delete renamedDetails[oldSubtask];
+    renamedDetails[cleanTitle] = { ...existing, details: details.trim() };
+    const subtasks = target.subtasks.map((subtask) => subtask === oldSubtask ? cleanTitle : subtask);
+    await updateTicketSubtasks(id, subtasks, renamedDetails);
+  };
+
+  const deleteTicketSubtask = async (id: string, subtask: string) => {
+    const target = tickets.find((ticket) => ticket.id === id);
+    if (!target) return;
+    const details = { ...ticketSubtaskDetails(target) };
+    delete details[subtask];
+    await updateTicketSubtasks(id, target.subtasks.filter((item) => item !== subtask), details);
+  };
+
   const deleteTicket = async (id: string) => {
     const previous = tickets;
     setTickets((current) => current.filter((ticket) => ticket.id !== id));
@@ -1594,11 +1754,21 @@ export function CockpitPage() {
                 className="now-drop-zone"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
+                  const subtaskPayload = event.dataTransfer.getData("application/dash-subtask");
+                  if (subtaskPayload) {
+                    try {
+                      const payload = JSON.parse(subtaskPayload) as { ticketId?: string; subtask?: string };
+                      if (payload.ticketId && payload.subtask) void moveTicketSubtask(payload.ticketId, payload.subtask, "now");
+                    } catch {
+                      // Ignore malformed drag payloads from outside the cockpit.
+                    }
+                    return;
+                  }
                   const id = event.dataTransfer.getData("text/plain");
-                  if (id) void moveTicket(id, "now");
+                  if (id && !id.startsWith("subtask:")) void moveTicket(id, "now");
                 }}
               >
-                Drop saved ticket here
+                Drop ticket or subtask here
               </div>
               <article className="now-item">
                 <div className="cockpit-meta">
@@ -1619,14 +1789,26 @@ export function CockpitPage() {
                   onMove={moveTicket}
                   onEdit={editTicket}
                   onAddSubtask={addTicketSubtask}
-                  onUpdateSubtaskDetails={updateTicketSubtaskDetails}
+                  onMoveSubtask={moveTicketSubtask}
+                  onUpdateSubtask={editTicketSubtask}
+                  onDeleteSubtask={deleteTicketSubtask}
                   onDelete={deleteTicket}
+                />
+              ))}
+              {nowSubtasks.map(({ ticket, subtask }) => (
+                <NowSubtaskCard
+                  key={`${ticket.id}:${subtask}`}
+                  ticket={ticket}
+                  subtask={subtask}
+                  onMoveSubtask={moveTicketSubtask}
+                  onUpdateSubtask={editTicketSubtask}
+                  onDeleteSubtask={deleteTicketSubtask}
                 />
               ))}
             </div>
           </CockpitCard>
 
-          <CockpitCard eyebrow="02 - create ticket" tone={COCKPIT_GREEN} className="cockpit-ticket-card cockpit-primary-card">
+          <CockpitCard eyebrow="02 - create ticket" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card">
             <div className="ticket-compose-stack">
               <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
 
@@ -1683,7 +1865,9 @@ export function CockpitPage() {
                     onMove={moveTicket}
                     onEdit={editTicket}
                     onAddSubtask={addTicketSubtask}
-                    onUpdateSubtaskDetails={updateTicketSubtaskDetails}
+                    onMoveSubtask={moveTicketSubtask}
+                    onUpdateSubtask={editTicketSubtask}
+                    onDeleteSubtask={deleteTicketSubtask}
                     onDelete={deleteTicket}
                   />
                 ))}

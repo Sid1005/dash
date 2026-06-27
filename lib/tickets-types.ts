@@ -2,7 +2,8 @@ export type TicketAgent = "codex" | "claude" | "hermes" | "openclaw";
 export type TicketImportance = "low" | "medium" | "high" | "urgent";
 export type TicketMissionStatus = "none" | "queued" | "created" | "failed";
 export type TicketStatus = "backlog" | "now" | "done" | "archived";
-export type TicketSubtaskDetails = Record<string, { details?: string }>;
+export type TicketSubtaskStatus = "backlog" | "now";
+export type TicketSubtaskDetails = Record<string, { details?: string; status?: TicketSubtaskStatus }>;
 
 export type TicketRow = {
   id: string;

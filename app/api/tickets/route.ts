@@ -6,6 +6,7 @@ import type { TicketAgent, TicketImportance, TicketRow, TicketStatus, TicketSubt
 const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw"]);
 const IMPORTANCE = new Set<TicketImportance>(["low", "medium", "high", "urgent"]);
 const STATUSES = new Set<TicketStatus>(["backlog", "now", "done", "archived"]);
+const SUBTASK_STATUSES = new Set(["backlog", "now"]);
 
 function cleanSubtasks(value: unknown) {
   return Array.isArray(value)
@@ -21,7 +22,13 @@ function cleanSubtaskDetails(value: unknown): TicketSubtaskDetails {
       const details = typeof (item as { details?: unknown }).details === "string"
         ? (item as { details: string }).details.trim()
         : "";
-      acc[key] = details ? { details } : {};
+      const status = typeof (item as { status?: unknown }).status === "string" && SUBTASK_STATUSES.has((item as { status: string }).status)
+        ? (item as { status: "backlog" | "now" }).status
+        : undefined;
+      acc[key] = {
+        ...(details ? { details } : {}),
+        ...(status ? { status } : {}),
+      };
     }
     return acc;
   }, {});
