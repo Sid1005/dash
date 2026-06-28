@@ -722,11 +722,23 @@ a {
   gap: 0;
   cursor: grab;
   min-width: 0;
-  box-shadow: 4px 4px 0 var(--line);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 4px 4px 0 rgba(22, 19, 15, 0.18);
+}
+
+.saved-ticket-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 10px;
+  background: #f3de63;
+  pointer-events: none;
 }
 
 .saved-ticket-card.now-ticket-card {
   cursor: default;
+  box-shadow: 4px 4px 0 rgba(22, 19, 15, 0.18);
 }
 
 .saved-ticket-card:active {
