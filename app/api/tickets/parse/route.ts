@@ -4,7 +4,7 @@ import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 import type { TicketAgent, TicketImportance } from "@/lib/tickets-types";
 
 const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw"]);
-const IMPORTANCE = new Set<TicketImportance>(["low", "medium", "high", "urgent"]);
+const IMPORTANCE = new Set<TicketImportance>(["p0", "p1", "p2"]);
 
 type ParsedTicket = {
   title: string;
@@ -71,10 +71,11 @@ export async function POST(req: Request) {
           content: [
             "Extract a laptop-work ticket from messy user text.",
             "Return only JSON with keys: title, dueDate, dueAt, importance, subtasks, agent.",
-            "title: concise task title, no due date or priority words.",
+            "title: concise task title, no due date words and no priority words such as P0, P1, P2, urgent, important, high, or low.",
             "dueDate: short human label like Today, Tonight, Tomorrow, Jun 30, or empty.",
             "dueAt: ISO 8601 timestamp in Asia/Kolkata if inferable, otherwise empty.",
-            "importance: one of low, medium, high, urgent, or empty.",
+            "importance: one of p0, p1, p2, or empty. P0 is most critical, P1 is important, P2 is normal/lower priority.",
+            "Treat explicit P0/P1/P2 as the only priority vocabulary; do not infer urgent/high/low labels.",
             "subtasks: array of short action strings. Split comma/newline/arrow lists.",
             "agent: codex, claude, hermes, openclaw, or null.",
             "Only choose an agent if the text explicitly mentions one or selectedAgent is provided.",

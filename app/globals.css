@@ -40,7 +40,7 @@
   --text: #16130F;
   --muted: #8a877d;
   --dim: #6B675E;
-  --blue: #8BD4F0;
+  --blue: #6EC7EA;
   --blue-soft: #8a877d;
   --blue-deep: #ECEBE3;
   --rose: #b24444;
@@ -173,7 +173,7 @@ a {
   box-shadow: 1.5px 1.5px 0px #000000;
 }
 .zine-eyebrow.blue {
-  background: #7dd3fc; /* blue highlighter */
+  background: var(--blue); /* blue highlighter */
 }
 
 /* Metal Staple/Paperclip overlay */
@@ -375,17 +375,19 @@ a {
 }
 
 .cockpit-demo-shell {
-  width: min(1480px, calc(100vw - 44px));
+  width: min(1680px, calc(100vw - 44px));
   margin: 0 auto;
   padding: 18px 0 42px;
+  overflow-x: auto;
 }
 
 .cockpit-demo-grid {
   display: grid;
-  grid-template-columns: 400px 1fr;
-  column-gap: 44px;
+  grid-template-columns: minmax(360px, 0.8fr) minmax(620px, 1.6fr);
+  column-gap: 34px;
   row-gap: 28px;
   align-items: start;
+  min-width: 1014px;
 }
 
 .cockpit-ticket-stack {
@@ -488,6 +490,7 @@ a {
   font-family: var(--sans);
   font-size: 16px;
   font-weight: 500;
+  color: #16130F;
   line-height: 1.35;
   box-shadow: inset 3px 3px 0 rgba(0, 0, 0, 0.08);
   margin-top: 12px;
@@ -664,15 +667,24 @@ a {
 
 .saved-ticket-close {
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 1.5px solid #16130F;
   background: #ffffff;
-  color: #16130F;
+  color: #5f5b52;
   display: grid;
   place-items: center;
   padding: 0;
   cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.82;
+}
+
+.saved-ticket-close:hover,
+.saved-ticket-close:focus-visible {
+  color: #16130F;
+  opacity: 1;
 }
 
 .saved-ticket-grid::-webkit-scrollbar {

@@ -7,6 +7,7 @@ type FoodRow = {
   id: string;
   logged_date: string;
   name: string;
+  meal_title: string | null;
   calories: number;
   protein_g: number | string;
   estimated: boolean;
@@ -22,6 +23,7 @@ function rowToEntry(row: FoodRow): FoodEntryWithId {
   return {
     id: row.id,
     name: row.name,
+    meal_title: row.meal_title ?? undefined,
     calories: row.calories,
     protein_g: Number.isFinite(pg) ? Math.round(pg * 10) / 10 : 0,
     estimated: row.estimated,
@@ -55,6 +57,7 @@ export async function insertFoodEntry(
     owner_user_id: ownerUserId,
     logged_date: loggedDate,
     name: entry.name.trim(),
+    meal_title: entry.meal_title?.trim() || null,
     calories: Math.max(0, Math.round(entry.calories ?? 0)),
     protein_g: Math.max(0, Number(entry.protein_g ?? 0)),
     estimated: Boolean(entry.estimated),

@@ -222,7 +222,7 @@ export async function applyParsedAction(
     const entry = data as unknown as FoodEntry;
     await insertFoodEntry(targetDate, entry, dbScope);
     const est = entry.estimated ? " (estimated)" : "";
-    return `Logged ${entry.name}: ${entry.calories} cal, ${entry.protein_g}g protein${est}`;
+    return `Logged ${(entry.meal_title || entry.name)}: ${entry.calories} cal, ${entry.protein_g}g protein${est}`;
   }
 
   if (type === "multiple_food") {
@@ -266,7 +266,7 @@ export async function applyParsedAction(
     await insertFoodEntry(targetDate, f, dbScope);
     await insertSpending(targetDate, s, dbScope);
     const est = f.estimated ? " (estimated)" : "";
-    return `Logged ${f.name}: ${f.calories} cal, ${f.protein_g}g protein${est} · ${formatINR(s.amount)}`;
+    return `Logged ${(f.meal_title || f.name)}: ${f.calories} cal, ${f.protein_g}g protein${est} · ${formatINR(s.amount)}`;
   }
 
   if (type === "calendar_event_create") {
@@ -448,7 +448,7 @@ export function formatActionPreview(action: ParsedAction): string {
     const entry = data as unknown as FoodEntry;
     const est = entry.estimated ? " (estimated)" : "";
     const dateLabel = formatDateLabel(data.date as string);
-    return `I found *${entry.name}*${dateLabel} -> *${entry.calories} cal*, *${entry.protein_g}g protein*${est}.\nNote it down? Reply *yes* or *no*.`;
+    return `I found *${entry.meal_title || entry.name}*${dateLabel} -> *${entry.calories} cal*, *${entry.protein_g}g protein*${est}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "multiple_food") {
@@ -456,7 +456,7 @@ export function formatActionPreview(action: ParsedAction): string {
     const dateLabel = formatDateLabel(data.date as string);
     const calories = entries.reduce((sum, entry) => sum + (Number(entry.calories) || 0), 0);
     const protein = entries.reduce((sum, entry) => sum + (Number(entry.protein_g) || 0), 0);
-    const preview = entries.slice(0, 8).map((entry) => `*${entry.name}* -> ${entry.calories} cal, ${entry.protein_g}g protein`).join("\n");
+    const preview = entries.slice(0, 8).map((entry) => `*${entry.meal_title || entry.name}* -> ${entry.calories} cal, ${entry.protein_g}g protein`).join("\n");
     const more = entries.length > 8 ? `\n…and ${entries.length - 8} more` : "";
     return `I found ${entries.length} food items${dateLabel} -> *${Math.round(calories)} cal*, *${Math.round(protein)}g protein* estimated total.\n${preview}${more}\nNote them down? Reply *yes* or *no*.`;
   }
@@ -468,7 +468,7 @@ export function formatActionPreview(action: ParsedAction): string {
     const spendingDate = (data.spending as { date?: string } | undefined)?.date;
     const foodDate = (data.food as { date?: string } | undefined)?.date;
     const dateLabel = formatDateLabel((data.date as string) || spendingDate || foodDate);
-    return `I found *${f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *${formatINR(s.amount)}* spend${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
+    return `I found *${f.meal_title || f.name}* -> *${f.calories} cal*, *${f.protein_g}g protein*${est}, and *${formatINR(s.amount)}* spend${dateLabel}.\nNote it down? Reply *yes* or *no*.`;
   }
 
   if (type === "spending") {

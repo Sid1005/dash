@@ -204,11 +204,12 @@ export function useDashData(
 
       const mealRows: DashBlock[] = food.map((f) => {
         const start = f.time || "12:00";
+        const label = f.meal_title?.trim() || f.name;
         return {
           kind: "meal",
           start,
           end: fromMinutes(toMinutes(start) + 30),
-          label: f.name,
+          label,
           kcal: f.calories,
           p: f.protein_g,
           est: f.estimated,
@@ -256,7 +257,7 @@ export function useDashData(
       const meals = food.map((f) => ({
         id: f.id,
         t: f.time,
-        label: f.name,
+        label: f.meal_title?.trim() || f.name,
         kcal: f.calories,
         p: f.protein_g,
         cost: f.cost,
@@ -279,7 +280,7 @@ export function useDashData(
           t: f.time,
           who: "telegram",
           verb: "logged",
-          obj: `${f.name} · ${f.calories} kcal · ${f.protein_g}g`,
+          obj: `${(f.meal_title?.trim() || f.name)} · ${f.calories} kcal · ${f.protein_g}g`,
           est: f.estimated,
         })),
         ...timeBlocks.map<DashFeed>((b) => ({
@@ -963,7 +964,7 @@ export function DayTimeline({
 }
 
 type CockpitAgent = "codex" | "claude" | "hermes" | "openclaw";
-type CockpitImportance = "low" | "medium" | "high" | "urgent";
+type CockpitImportance = "p0" | "p1" | "p2";
 
 type CockpitTicketDraft = {
   title: string;
@@ -981,7 +982,7 @@ const AGENT_LABELS: Record<CockpitAgent, string> = {
   openclaw: "OpenClaw",
 };
 
-const COCKPIT_BLUE = "#7dd3fc";
+const COCKPIT_BLUE = "#6EC7EA";
 
 const AGENT_COLORS: Record<CockpitAgent, string> = {
   codex: COCKPIT_BLUE,
@@ -991,10 +992,16 @@ const AGENT_COLORS: Record<CockpitAgent, string> = {
 };
 
 const IMPORTANCE_LABELS: Record<CockpitImportance, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  urgent: "Urgent",
+  p0: "P0",
+  p1: "P1",
+  p2: "P2",
+};
+
+const LEGACY_IMPORTANCE_LABELS: Record<string, string> = {
+  urgent: "P0",
+  high: "P1",
+  medium: "P2",
+  low: "P2",
 };
 
 function titleCaseText(value: string) {
@@ -1012,7 +1019,10 @@ function ticketDueText(ticket: TicketRow) {
 }
 
 function ticketImportanceText(ticket: TicketRow) {
-  return ticket.importance ? IMPORTANCE_LABELS[ticket.importance] : "No priority";
+  if (!ticket.importance) return "No priority";
+  return (IMPORTANCE_LABELS as Record<string, string>)[ticket.importance]
+    ?? LEGACY_IMPORTANCE_LABELS[ticket.importance]
+    ?? ticket.importance.toUpperCase();
 }
 
 function ticketSubtaskDetails(ticket: TicketRow): TicketSubtaskDetails {
@@ -1036,11 +1046,23 @@ function stripFieldLines(value: string) {
     .split(/\n+/)
     .filter((line) => {
       if (/^\s*(due|deadline|by|importance|priority|subtasks?|steps?)\b/i.test(line)) return false;
-      if (/^\s*(urgent|high|medium|low|important|very important|low priority)\s*$/i.test(line)) return false;
+      if (/^\s*p[0-2]\s*$/i.test(line)) return false;
       return true;
     })
     .join(" ")
     .trim();
+}
+
+function stripTicketMetadataWords(value: string) {
+  return value
+    .replace(/\bP[0-2]\b/gi, "")
+    .replace(/\b(urgent|asap|very important|important|high priority|low priority|tonight|today|tomorrow|eod|end of day)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function displayTicketTitle(value: string) {
+  return titleCaseText(stripTicketMetadataWords(value)) || value;
 }
 
 function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): CockpitTicketDraft {
@@ -1054,7 +1076,7 @@ function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): C
   const cleaned = text.replace(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)/ig, "").trim();
   const beforeSubtasks = stripFieldLines(cleaned).split(/\bsubtasks?\b/i)[0] ?? "";
   const firstTitleChunk = beforeSubtasks.split(/[.!?]/).find((chunk) => chunk.trim()) ?? "";
-  const title = titleCaseText(firstTitleChunk.replace(/\b(by|before|due|deadline)\b.*$/i, ""));
+  const title = titleCaseText(stripTicketMetadataWords(firstTitleChunk.replace(/\b(by|before|due|deadline)\b.*$/i, "")));
 
   let dueDate = "";
   let dueAt = "";
@@ -1079,10 +1101,8 @@ function parseCockpitTicket(text: string, selectedAgent: CockpitAgent | null): C
   }
 
   let importance: CockpitImportance | "" = "";
-  if (lower.includes("urgent") || lower.includes("asap")) importance = "urgent";
-  else if (lower.includes("very important") || lower.includes("must")) importance = "high";
-  else if (lower.includes("important")) importance = "medium";
-  else if (lower.includes("low priority")) importance = "low";
+  const priorityMatch = text.match(/\bP([0-2])\b/i);
+  if (priorityMatch) importance = `p${priorityMatch[1]}` as CockpitImportance;
   const subtaskMatch = cleaned.match(/\b(?:subtasks?|steps?)\b\s*(?::|->|-)?\s*([\s\S]*)/i);
   const subtasks = subtaskMatch
     ? subtaskMatch[1]
@@ -1405,7 +1425,7 @@ function SubtaskMiniCard({
           style={{
             fontFamily: "var(--mono)",
             fontSize: "13px",
-            color: "#c0bdb2",
+            color: "#817d72",
             flex: "none",
             cursor: "pointer",
             userSelect: "none"
@@ -1442,7 +1462,7 @@ function NowSubtaskCard({
               SUBTASK
             </span>
             <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#8a877d", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {ticket.title}
+              {displayTicketTitle(ticket.title)}
             </span>
           </div>
           <div style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: 15, color: "#16130F", marginTop: 6 }}>
@@ -1464,8 +1484,8 @@ function NowSubtaskCard({
             border: "1.5px solid #16130F",
             background: "#ffffff",
             cursor: "pointer",
-            fontSize: 15,
-            color: "#16130F",
+            fontSize: 13,
+            color: "#5f5b52",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1473,7 +1493,7 @@ function NowSubtaskCard({
           }}
           title="Send back to its ticket"
         >
-          ×
+          ✕
         </button>
       </div>
     </div>
@@ -1509,7 +1529,7 @@ function TicketCard({
   const [busy, setBusy] = useState(false);
   const visibleSubtasks = ticket.subtasks.filter((subtask) => subtaskStatus(ticket, subtask) === "backlog");
 
-  const accent = index % 2 === 0 ? "#8BD4F0" : "#F3E15E";
+  const accent = index % 2 === 0 ? COCKPIT_BLUE : "#F3E15E";
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1556,10 +1576,10 @@ function TicketCard({
       >
         <div className="saved-ticket-header-copy">
           <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "center" }}>
-            {ticket.title}
+            {displayTicketTitle(ticket.title)}
           </span>
           <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0, textAlign: "center" }}>
-            {`${ticketDueText(ticket).toUpperCase()} · ${ticketImportanceText(ticket).toUpperCase()}`}
+            {[ticketDueText(ticket), ticketImportanceText(ticket)].filter((item) => item !== "No due date" && item !== "No priority").join(" · ").toUpperCase()}
           </span>
         </div>
         <button
@@ -1570,7 +1590,7 @@ function TicketCard({
           aria-label={`Delete ticket ${ticket.title}`}
           style={{ position: "absolute", right: 0, top: 0, bottom: 0, margin: "auto 0" }}
         >
-          ×
+          ✕
         </button>
       </div>
       {editing ? (
@@ -1636,7 +1656,7 @@ function TicketCard({
               fontSize: 12,
               letterSpacing: ".1em",
               textTransform: "uppercase",
-              color: "#7a776e",
+              color: "#4f4b43",
               outline: "none",
               marginTop: 2
             }}
@@ -1726,6 +1746,21 @@ export function CockpitPage() {
   useEffect(() => {
     void loadTickets();
   }, [loadTickets, refreshTrigger]);
+
+  useEffect(() => {
+    const handleDragOver = (event: DragEvent) => {
+      const edgeSize = 96;
+      const speed = 18;
+      if (event.clientY < edgeSize) {
+        window.scrollBy({ top: -speed, behavior: "auto" });
+      } else if (window.innerHeight - event.clientY < edgeSize) {
+        window.scrollBy({ top: speed, behavior: "auto" });
+      }
+    };
+
+    window.addEventListener("dragover", handleDragOver);
+    return () => window.removeEventListener("dragover", handleDragOver);
+  }, []);
 
   useEffect(() => {
     setServerDraft(null);

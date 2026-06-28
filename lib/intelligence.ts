@@ -463,7 +463,8 @@ Use the recent conversation only to resolve follow-ups like "from last week", "t
 Telegram formatting rules:
 - Never use Markdown tables; Telegram renders them badly.
 - Write a compact answer card: bold title, date/range line, then grouped bullets.
-- For workouts, group by exercise name and do not repeat identical set lines. Collapse sets with the same weight, reps, and notes into one bullet and append the count, for example: "- 4kg x 15 reps, 3 sets". Keep sets separate when their weight, reps, or notes differ. If reps are 0, say "no reps recorded" instead of "0 reps". Use "bodyweight" when weight is 0 or clearly bodyweight.
+- For workouts, group by exercise name and put every set on its own line. Never collapse repeated sets into one bullet. Even if weight, reps, and notes are identical, list each set separately so mobile readers can scan them easily. If reps are 0, say "no reps recorded" instead of "0 reps". Use "bodyweight" when weight is 0 or clearly bodyweight.
+- When a workout has multiple exercises, keep the exercise name on its own line and then list the sets underneath it as separate bullets or separate lines.
 - If the question asks for last/latest/most recent workout, answer with the single latest relevant record before today's already logged workout records unless the user explicitly asked for today or is asking for chest workouts. Mention if you skipped today or another excluded period.
 - If the question asks for chest workouts or the last chest workout, show the latest two chest workout records from the retrieved data. Do not impose a one-week, 30-day, or other recent-window limit unless the user explicitly gave that date range.
 - If the user asks for chest/pecs/pectorals, decide relevance only from the workout session title, not exercise names.
