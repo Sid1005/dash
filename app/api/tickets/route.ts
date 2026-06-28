@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { getUserScopedDb, isUnauthorizedError } from "@/lib/owner-scope";
-import type { TaskRow } from "@/lib/tasks-types";
 import type { TicketAgent, TicketImportance, TicketRow, TicketStatus, TicketSubtaskDetails } from "@/lib/tickets-types";
 
 const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw"]);
-const IMPORTANCE = new Set<TicketImportance>(["low", "medium", "high", "urgent"]);
+const IMPORTANCE = new Set<TicketImportance>(["p0", "p1", "p2"]);
 const STATUSES = new Set<TicketStatus>(["backlog", "now", "done", "archived"]);
 const SUBTASK_STATUSES = new Set(["backlog", "now"]);
 
@@ -87,23 +86,11 @@ export async function POST(req: Request) {
     const subtaskDetails = cleanSubtaskDetails(body.subtask_details);
 
     const scope = await getUserScopedDb();
-    let task: TaskRow | null = null;
-    if (dueAt) {
-      const { data: taskData, error: taskError } = await scope.supabase
-        .from("tasks")
-        .insert({ owner_user_id: scope.ownerUserId, title, due_at: dueAt, done: false })
-        .select("*")
-        .single();
-
-      if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
-      task = taskData as TaskRow;
-    }
-
     const { data: ticket, error: ticketError } = await scope.supabase
       .from("tickets")
       .insert({
         owner_user_id: scope.ownerUserId,
-        task_id: task?.id ?? null,
+        task_id: null,
         title,
         due_at: dueAt,
         due_label: dueLabel,
@@ -121,7 +108,7 @@ export async function POST(req: Request) {
       .single();
 
     if (ticketError) return NextResponse.json({ error: ticketError.message }, { status: 500 });
-    return NextResponse.json({ ticket: ticket as TicketRow, task }, { status: 201 });
+    return NextResponse.json({ ticket: ticket as TicketRow }, { status: 201 });
   } catch (error) {
     const status = isUnauthorizedError(error) ? 401 : 500;
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -187,17 +174,6 @@ export async function PATCH(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const ticket = data as TicketRow;
-    if (title !== null && ticket.task_id) {
-      const { error: taskError } = await scope.supabase
-        .from("tasks")
-        .update({ title })
-        .eq("owner_user_id", scope.ownerUserId)
-        .eq("id", ticket.task_id);
-
-      if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
-    }
-
     return NextResponse.json({ ticket: data as TicketRow });
   } catch (error) {
     const status = isUnauthorizedError(error) ? 401 : 500;
@@ -213,15 +189,6 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
     const scope = await getUserScopedDb();
-    const { data: ticket, error: fetchError } = await scope.supabase
-      .from("tickets")
-      .select("*")
-      .eq("owner_user_id", scope.ownerUserId)
-      .eq("id", id)
-      .single();
-
-    if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
-
     const { error: archiveError } = await scope.supabase
       .from("tickets")
       .update({ status: "archived", sort_order: 0 })
@@ -229,17 +196,6 @@ export async function DELETE(req: Request) {
       .eq("id", id);
 
     if (archiveError) return NextResponse.json({ error: archiveError.message }, { status: 500 });
-
-    const taskId = (ticket as TicketRow).task_id;
-    if (taskId) {
-      const { error: taskError } = await scope.supabase
-        .from("tasks")
-        .delete()
-        .eq("owner_user_id", scope.ownerUserId)
-        .eq("id", taskId);
-
-      if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
-    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

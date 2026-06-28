@@ -27,7 +27,9 @@ Classification rules (read the entire message before choosing a tool):
 - For diet / food logs:
   - Use food tools when the message clearly reports food that was eaten or consumed. A meal label by itself does not establish a food log.
   - Be conservative when guessing calories and protein_g. Single casual meal protein rarely exceeds 35-40g. Lean meat portions: 22-28g protein. Bowl of oatmeal: 8-14g protein.
-  - If the user sends a list of foods eaten across the day or multiple meals/items, use log_multiple_food. Estimate each item separately.
+  - If the user lists several foods for one meal, use log_food for the combined meal.
+  - Use log_multiple_food only when the message clearly separates multiple meals, such as breakfast/lunch/dinner/snack labels or separate time-based meal sections.
+  - When using log_multiple_food, keep one entry per meal section and give each entry the meal title as its name when available.
   - Use log_food only for a single food item or single combined meal.
 - For workout logs:
   - Use log_workout when the message records a workout that happened and contains one or more exercises. A workout does not have to include sets or reps.
@@ -385,6 +387,123 @@ export interface ParsedAction {
   data: Record<string, unknown>;
 }
 
+type ParsedFoodEntry = {
+  name: string;
+  meal_title?: string;
+  calories: number;
+  protein_g: number;
+  estimated: boolean;
+  cost?: number;
+  time?: string;
+  meal?: string;
+};
+
+const MEAL_LABELS = new Set(["breakfast", "lunch", "dinner", "snack", "snacks", "brunch", "supper"]);
+
+function normalizeMealLabel(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const label = value.trim().toLowerCase();
+  if (!label) return undefined;
+  if (label === "snacks") return "snack";
+  return MEAL_LABELS.has(label) ? label : undefined;
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function isMealOnlyEntry(entry: ParsedFoodEntry): boolean {
+  const meal = normalizeMealLabel(entry.meal);
+  if (!meal) return false;
+  const name = entry.name.trim().toLowerCase();
+  return name === meal || name === `${meal} meal` || name === `${meal} plate`;
+}
+
+function combineFoodEntries(entries: ParsedFoodEntry[]): ParsedFoodEntry {
+  const meal = normalizeMealLabel(entries[0]?.meal) ?? (isMealOnlyEntry(entries[0]) ? normalizeMealLabel(entries[0].name) : undefined);
+  const joinedName = entries
+    .map((entry) => entry.name.trim())
+    .filter(Boolean)
+    .join(", ");
+  return {
+    name: meal ? titleCase(meal) : joinedName.slice(0, 200),
+    meal_title: meal ? titleCase(meal) : undefined,
+    calories: entries.reduce((sum, entry) => sum + (Number(entry.calories) || 0), 0),
+    protein_g: entries.reduce((sum, entry) => sum + (Number(entry.protein_g) || 0), 0),
+    estimated: entries.some((entry) => entry.estimated),
+    cost: entries.reduce((sum, entry) => sum + (Number(entry.cost) || 0), 0),
+    time: entries.find((entry) => entry.time)?.time,
+    meal,
+  };
+}
+
+function normalizeParsedFoodAction(action: ParsedAction): ParsedAction {
+  if (action.type === "food") {
+    const entry = action.data as unknown as ParsedFoodEntry;
+    const meal = normalizeMealLabel(entry.meal) ?? (isMealOnlyEntry(entry) ? normalizeMealLabel(entry.name) : undefined);
+    return {
+      ...action,
+      data: {
+        ...action.data,
+        meal,
+        name: meal ? titleCase(meal) : entry.name,
+        meal_title: meal ? titleCase(meal) : undefined,
+      },
+    };
+  }
+
+  if (action.type !== "multiple_food") return action;
+
+  const entries = ((action.data.entries ?? []) as ParsedFoodEntry[]).filter((entry) => entry && typeof entry.name === "string");
+  if (entries.length === 0) return action;
+
+  const labeledMeals = entries.map((entry) => normalizeMealLabel(entry.meal)).filter(Boolean) as string[];
+  const uniqueMeals = new Set(labeledMeals);
+  const hasClearMealSections = uniqueMeals.size > 1;
+  const allEntriesShareOneMeal = uniqueMeals.size === 1;
+  const allEntriesAreMealOnly = entries.every(isMealOnlyEntry);
+
+  if (hasClearMealSections) {
+    const grouped = new Map<string, ParsedFoodEntry[]>();
+    const unlabeled: ParsedFoodEntry[] = [];
+    for (const entry of entries) {
+      const meal = normalizeMealLabel(entry.meal);
+      if (meal) {
+        const list = grouped.get(meal) ?? [];
+        list.push({ ...entry, meal });
+        grouped.set(meal, list);
+      } else {
+        unlabeled.push(entry);
+      }
+    }
+
+    const normalizedEntries = [
+      ...Array.from(grouped.entries()).map(([meal, mealEntries]) => combineFoodEntries(mealEntries.map((entry) => ({ ...entry, meal })))),
+      ...(unlabeled.length > 0 ? [combineFoodEntries(unlabeled)] : []),
+    ];
+
+    return { ...action, type: "multiple_food", data: { ...action.data, entries: normalizedEntries } };
+  }
+
+  if (allEntriesShareOneMeal || allEntriesAreMealOnly) {
+    return {
+      ...action,
+      type: "food",
+      data: combineFoodEntries(entries),
+    };
+  }
+
+  return {
+    ...action,
+    type: "food",
+    data: combineFoodEntries(entries),
+  };
+}
+
 export async function parseInput(
   input: string,
   now: string,
@@ -492,37 +611,53 @@ If the user's input is a completely new command, ignore the pending action and p
 
     console.log(`[Parser] Input: "${input}" resolved to tool call: ${name} with args:`, args);
 
+    let parsedAction: ParsedAction;
     switch (name) {
       case "log_workout":
-        return { type: "workout", data: args };
+        parsedAction = { type: "workout", data: args };
+        break;
       case "log_food":
-        return { type: "food", data: args };
+        parsedAction = { type: "food", data: args };
+        break;
       case "log_multiple_food":
-        return { type: "multiple_food", data: args };
+        parsedAction = { type: "multiple_food", data: args };
+        break;
       case "log_spending":
-        return { type: "spending", data: args };
+        parsedAction = { type: "spending", data: args };
+        break;
       case "log_multiple_spending":
-        return { type: "multiple_spending", data: args };
+        parsedAction = { type: "multiple_spending", data: args };
+        break;
       case "log_food_and_spending":
-        return { type: "food_and_spending", data: args };
+        parsedAction = { type: "food_and_spending", data: args };
+        break;
       case "create_calendar_event":
-        return { type: "calendar_event_create", data: args };
+        parsedAction = { type: "calendar_event_create", data: args };
+        break;
       case "update_calendar_event":
-        return { type: "calendar_event_update", data: args };
+        parsedAction = { type: "calendar_event_update", data: args };
+        break;
       case "delete_calendar_event":
-        return { type: "calendar_event_delete", data: args };
+        parsedAction = { type: "calendar_event_delete", data: args };
+        break;
       case "add_task":
-        return { type: "task", data: args };
+        parsedAction = { type: "task", data: args };
+        break;
       case "add_tasks":
-        return { type: "tasks", data: args };
+        parsedAction = { type: "tasks", data: args };
+        break;
       case "log_idea":
-        return { type: "idea", data: args };
+        parsedAction = { type: "idea", data: args };
+        break;
       case "log_problem":
-        return { type: "problem", data: args };
+        parsedAction = { type: "problem", data: args };
+        break;
       case "chat_response":
       default:
-        return { type: "chat", data: args };
+        parsedAction = { type: "chat", data: args };
+        break;
     }
+    return normalizeParsedFoodAction(parsedAction);
   } catch (err) {
     console.error("[Parser] Tool calling parsing failed, not saving input:", err);
     return { type: "chat", data: { response: "I could not classify that as a supported log, so I did not save it." } };

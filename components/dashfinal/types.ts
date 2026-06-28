@@ -9,6 +9,7 @@ export type TaskApiRow = {
 export type FoodApiRow = {
   id: string;
   name: string;
+  meal_title?: string | null;
   calories: number;
   protein_g: number;
   estimated: boolean;

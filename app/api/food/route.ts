@@ -16,7 +16,7 @@ export const maxDuration = 30;
  * Body — either freeform (LLM-parsed + calorie/protein estimation):
  *   { "input": "3 eggs and toast for breakfast" }
  * or structured (instant, no LLM):
- *   { "name": "Eggs and toast", "calories": 350, "protein_g": 18, "meal": "breakfast" }
+ *   { "name": "Eggs and toast", "meal_title": "Breakfast", "calories": 350, "protein_g": 18, "meal": "breakfast" }
  *
  * `date`/`now` are optional ISO/IST overrides; default to current IST.
  */
@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     const protein_g = typeof body.protein_g === "number" ? body.protein_g : Number(body.protein_g ?? 0);
     const cost = typeof body.cost === "number" ? body.cost : Number(body.cost ?? 0);
     const meal = typeof body.meal === "string" && body.meal ? body.meal : "other";
+    const mealTitle = typeof body.meal_title === "string" && body.meal_title.trim() ? body.meal_title.trim().slice(0, 200) : undefined;
     const estimated = typeof body.estimated === "boolean" ? body.estimated : false;
 
     const row = await insertFoodEntry(
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
         cost,
         time,
         meal,
+        meal_title: mealTitle,
         estimated,
       },
       scope

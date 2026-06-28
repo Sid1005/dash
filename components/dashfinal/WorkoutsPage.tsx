@@ -490,7 +490,7 @@ export default function WorkoutsPage() {
                         }}
                         style={{
                           background: isActive ? "var(--blue)" : "var(--bg-2)",
-                          color: isActive ? "#fffaf0" : "var(--text)",
+                          color: isActive ? "var(--text)" : "var(--text)",
                           border: `1px solid ${isActive ? "var(--blue)" : "var(--line)"}`,
                           borderRadius: 6,
                           padding: "6px 12px",
@@ -510,7 +510,7 @@ export default function WorkoutsPage() {
                     onClick={beginNewWorkout}
                     style={{
                       background: isCreatingNewWorkout ? "var(--blue)" : "transparent",
-                      color: isCreatingNewWorkout ? "#fffaf0" : "var(--blue)",
+                      color: isCreatingNewWorkout ? "var(--text)" : "var(--blue)",
                       border: `1px dashed var(--blue)`,
                       borderRadius: 6,
                       padding: "6px 12px",
@@ -529,8 +529,8 @@ export default function WorkoutsPage() {
                       onClick={handleCombineWorkouts}
                       style={{
                         background: "transparent",
-                        color: "var(--rose)",
-                        border: `1px dashed var(--rose)`,
+                        color: "var(--blue)",
+                        border: `1px dashed var(--blue)`,
                         borderRadius: 6,
                         padding: "6px 12px",
                         fontSize: 11,
@@ -539,7 +539,7 @@ export default function WorkoutsPage() {
                         transition: "background 0.2s, color 0.2s",
                       }}
                       onMouseOver={(e) => {
-                        e.currentTarget.style.background = "rgba(178, 68, 68, 0.05)";
+                        e.currentTarget.style.background = "rgba(36,84,214,0.05)";
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.background = "transparent";
@@ -828,7 +828,7 @@ export default function WorkoutsPage() {
                     onClick={handleSaveEdit}
                     style={{
                       background: "var(--blue)",
-                      color: "#fffaf0",
+                      color: "var(--text)",
                       border: "none",
                       padding: "12px 20px",
                       borderRadius: 6,
@@ -935,7 +935,7 @@ export default function WorkoutsPage() {
                     onClick={startEditing}
                     style={{
                       background: "var(--blue)",
-                      color: "#fffaf0",
+                      color: "var(--text)",
                       border: "none",
                       padding: "10px 18px",
                       borderRadius: 6,
@@ -1237,7 +1237,7 @@ export default function WorkoutsPage() {
                   style={{
                     width: "100%",
                     background: "var(--blue)",
-                    color: "#fffaf0",
+                    color: "var(--text)",
                     border: "none",
                     padding: "14px 20px",
                     borderRadius: 8,

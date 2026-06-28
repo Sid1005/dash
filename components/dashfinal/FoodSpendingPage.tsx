@@ -172,8 +172,8 @@ export function FoodSpendingPage() {
   };
 
   const compactButtonStyle: React.CSSProperties = {
-    background: "#0c0c0e",
-    color: "#fff",
+    background: "var(--blue)",
+    color: "var(--text)",
     border: "2px solid #000",
     borderRadius: 0,
     padding: "8px 14px",
@@ -222,8 +222,8 @@ export function FoodSpendingPage() {
                     type="button"
                     onClick={() => setShowAddForm(!showAddForm)}
                     style={{
-                      background: showAddForm ? "var(--rose)" : "var(--blue)",
-                      color: "#fffaf0",
+                      background: "var(--blue)",
+                      color: "var(--text)",
                       border: "2px solid #000",
                       padding: "4px 9px",
                       cursor: "pointer",
@@ -257,7 +257,7 @@ export function FoodSpendingPage() {
                   flexDirection: "column",
                   gap: 16,
                   padding: "16px 20px",
-                  background: "var(--bg)",
+                  background: "var(--card)",
                   border: "2px solid #000",
                   borderRadius: 0,
                   marginBottom: 8,
@@ -277,7 +277,7 @@ export function FoodSpendingPage() {
                         padding: "8px 12px",
                         border: "2px solid #000",
                         borderRadius: 0,
-                        background: "var(--bg)",
+                        background: "var(--card)",
                         color: "var(--text)",
                         fontSize: 14,
                         fontFamily: "inherit",
@@ -302,7 +302,7 @@ export function FoodSpendingPage() {
                         padding: "8px 12px",
                         border: "2px solid #000",
                         borderRadius: 0,
-                        background: "var(--bg)",
+                        background: "var(--card)",
                         color: "var(--text)",
                         fontSize: 14,
                         fontFamily: "var(--mono)",
@@ -325,7 +325,7 @@ export function FoodSpendingPage() {
                         padding: "8px 12px",
                         border: "2px solid #000",
                         borderRadius: 0,
-                        background: "var(--bg)",
+                        background: "var(--card)",
                         color: "var(--text)",
                         fontSize: 14,
                         fontFamily: "inherit",
@@ -357,7 +357,7 @@ export function FoodSpendingPage() {
                         padding: "8px 12px",
                         border: "2px solid #000",
                         borderRadius: 0,
-                        background: "var(--bg)",
+                        background: "var(--card)",
                         color: "var(--text)",
                         fontSize: 14,
                         fontFamily: "var(--mono)",
@@ -375,7 +375,7 @@ export function FoodSpendingPage() {
                   disabled={loading}
                   style={{
                     background: "var(--blue)",
-                    color: "#fffaf0",
+                    color: "var(--text)",
                     border: "2px solid #000",
                     padding: "10px",
                     cursor: loading ? "not-allowed" : "pointer",
@@ -448,8 +448,8 @@ export function FoodSpendingPage() {
                     type="button"
                     onClick={() => setShowAddFoodForm(!showAddFoodForm)}
                     style={{
-                      background: showAddFoodForm ? "var(--rose)" : "var(--blue)",
-                      color: "#fffaf0",
+                      background: "var(--blue)",
+                      color: "var(--text)",
                       border: "2px solid #000",
                       padding: "4px 9px",
                       cursor: "pointer",
@@ -479,7 +479,7 @@ export function FoodSpendingPage() {
                   flexDirection: "column",
                   gap: 12,
                   padding: "16px 20px",
-                  background: "var(--bg)",
+                  background: "var(--card)",
                   border: "2px solid #000",
                   marginBottom: 8,
                 }}

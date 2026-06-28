@@ -1,6 +1,7 @@
 export interface FoodEntry {
   id?: string;
   name: string;
+  meal_title?: string;
   calories: number;
   protein_g: number;
   estimated: boolean;
