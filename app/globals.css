@@ -657,12 +657,12 @@ a {
 
 .saved-ticket-header-copy {
   min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
   align-items: center;
   text-align: center;
-  width: 100%;
 }
 
 .saved-ticket-close {
@@ -714,6 +714,7 @@ a {
 }
 
 .saved-ticket-card {
+  box-sizing: border-box;
   width: 100%;
   border: 1.5px solid var(--line);
   background: #ffffff;
