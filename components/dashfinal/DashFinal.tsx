@@ -1636,7 +1636,7 @@ function TicketCard({
           onClick={() => void onDelete(ticket.id)}
           title="Delete ticket"
           aria-label={`Delete ticket ${ticket.title}`}
-          style={{ position: "static", flexShrink: 0, marginTop: 2 }}
+          style={{ position: "static", flexShrink: 0, marginTop: 2, boxSizing: "border-box" }}
         >
           ✕
         </button>
