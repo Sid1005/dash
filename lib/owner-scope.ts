@@ -8,7 +8,6 @@ export type DbScope = {
 };
 
 const DEFAULT_OWNER_EMAIL = "siddharth.ceri@gmail.com";
-const AUTH_BYPASS_ENABLED = process.env.DASH_AUTH_BYPASS !== "false";
 let cachedDefaultOwnerId: string | null = null;
 
 function unauthorized(): Error {
@@ -21,7 +20,7 @@ export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && error.name === "UnauthorizedError";
 }
 
-async function getAuthenticatedUserScopedDb(): Promise<DbScope> {
+export async function getUserScopedDb(): Promise<DbScope> {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -33,14 +32,6 @@ async function getAuthenticatedUserScopedDb(): Promise<DbScope> {
   }
 
   return { supabase: supabase as unknown as SupabaseClient, ownerUserId: user.id };
-}
-
-export async function getUserScopedDb(): Promise<DbScope> {
-  if (AUTH_BYPASS_ENABLED) {
-    return getDefaultOwnerDb();
-  }
-
-  return getAuthenticatedUserScopedDb();
 }
 
 export async function getDefaultOwnerId(): Promise<string> {
