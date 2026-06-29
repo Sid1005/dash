@@ -74,6 +74,7 @@ export async function POST(req: Request) {
             "title: concise task title, no due date words and no priority words such as P0, P1, P2, urgent, important, high, or low.",
             "dueDate: short human label like Today, Tonight, Tomorrow, Jun 30, or empty.",
             "dueAt: ISO 8601 timestamp in Asia/Kolkata if inferable, otherwise empty.",
+            "If the input includes an explicit weekday such as Wednesday, set dueDate to that weekday and set dueAt to the next matching date/time in Asia/Kolkata if you can infer it.",
             "importance: one of p0, p1, p2, or empty. P0 is most critical, P1 is important, P2 is normal/lower priority.",
             "Treat explicit P0/P1/P2 as the only priority vocabulary; do not infer urgent/high/low labels.",
             "subtasks: array of short action strings. Split comma/newline/arrow lists.",
