@@ -287,7 +287,26 @@ export async function POST(req: Request) {
       .select("*")
       .single();
 
-    if (ticketError) return NextResponse.json({ error: ticketError.message }, { status: 500 });
+    if (ticketError) {
+      console.error("[tickets:POST] insert failed", {
+        error: {
+          message: ticketError.message,
+          code: ticketError.code,
+          details: ticketError.details,
+          hint: ticketError.hint,
+        },
+        ticket: {
+          title,
+          dueAt,
+          dueLabel,
+          importance,
+          subtasks,
+          hasSubtaskDetails: Object.keys(subtaskDetails).length > 0,
+          agent,
+        },
+      });
+      return NextResponse.json({ error: ticketError.message }, { status: 500 });
+    }
     return NextResponse.json({ ticket: ticket as TicketRow }, { status: 201 });
   } catch (error) {
     const status = isUnauthorizedError(error) ? 401 : 500;

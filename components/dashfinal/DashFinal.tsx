@@ -1325,7 +1325,7 @@ function SubtaskMiniCard({
 
   if (editing) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#FFFCE8", border: "1.5px solid #16130F", padding: "10px 10px", boxShadow: "2px 2px 0 rgba(20,17,12,.14)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "#FFFCE8", border: "1.5px solid #16130F", padding: "10px 10px", boxShadow: "2px 2px 0 rgba(20,17,12,.14)", boxSizing: "border-box", minWidth: 0, width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 2.5px)", gap: "2.5px", flex: "none", opacity: 0.3 }}>
             <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
@@ -1417,7 +1417,10 @@ function SubtaskMiniCard({
         padding: "8px 10px",
         boxShadow: "2px 2px 0 rgba(20,17,12,.14)",
         cursor: "grab",
-        userSelect: "none"
+        userSelect: "none",
+        boxSizing: "border-box",
+        minWidth: 0,
+        width: "100%"
       }}
       title={details ? `Description: ${details}` : "Drag to focus · double-click to edit"}
     >
@@ -1666,7 +1669,7 @@ function TicketCard({
           </div>
         </div>
       ) : null}
-      <div className="saved-ticket-subtasks" style={{ padding: "0 18px 16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="saved-ticket-subtasks" style={{ padding: "0 18px 16px 20px", display: "flex", flexDirection: "column", gap: 10, boxSizing: "border-box", minWidth: 0, width: "100%" }}>
         {visibleSubtasks.length === 0 ? (
           <div style={{ padding: "22px 14px", textAlign: "center", fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".18em", color: "#b6b1a7", borderTop: "1px solid rgba(22,19,15,0.08)", borderBottom: "1px solid rgba(22,19,15,0.08)" }}>
             ALL IN FOCUS ✓
@@ -1697,6 +1700,7 @@ function TicketCard({
             placeholder="+ ADD SUBTASK"
             style={{
               width: "100%",
+              boxSizing: "border-box",
               border: "1.5px dashed rgba(22,19,15,0.18)",
               background: "rgba(255,255,255,0.55)",
               padding: "10px 12px",
