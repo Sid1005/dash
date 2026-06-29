@@ -247,7 +247,7 @@ export function FoodSpendingPage() {
                 </div>
               }
             />
-            <LedgerHeader items={[{ label: "spent", value: formatINR(data.VITALS.spend.today), of: formatINR(data.VITALS.spend.target, 0) }]} />
+            <LedgerHeader items={[{ label: "spent", value: formatINR(data.VITALS.spend.today) }]} />
 
             {showAddForm && (
               <form
@@ -467,8 +467,8 @@ export function FoodSpendingPage() {
               }
             />
             <LedgerHeader items={[
-              { label: "kcal", value: data.VITALS.kcal.today, of: data.VITALS.kcal.target },
-              { label: "protein", value: data.VITALS.protein.today, of: data.VITALS.protein.target, unit: "g" },
+              { label: "kcal", value: data.VITALS.kcal.today },
+              { label: "protein", value: data.VITALS.protein.today, unit: "g" },
             ]} />
 
             {showAddFoodForm && (
