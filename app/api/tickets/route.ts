@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getUserScopedDb, isUnauthorizedError } from "@/lib/owner-scope";
 import type { TicketAgent, TicketImportance, TicketRow, TicketStatus, TicketSubtaskDetails } from "@/lib/tickets-types";
 
-const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw"]);
+const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw", "ideas"]);
 const IMPORTANCE = new Set<TicketImportance>(["p0", "p1", "p2"]);
 const STATUSES = new Set<TicketStatus>(["backlog", "now", "done", "archived"]);
 const SUBTASK_STATUSES = new Set(["backlog", "now"]);

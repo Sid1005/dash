@@ -3,7 +3,7 @@ import { GROQ_MODEL, getGroqClient } from "@/lib/groq";
 import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 import type { TicketAgent, TicketImportance } from "@/lib/tickets-types";
 
-const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw"]);
+const AGENTS = new Set<TicketAgent>(["codex", "claude", "hermes", "openclaw", "ideas"]);
 const IMPORTANCE = new Set<TicketImportance>(["p0", "p1", "p2"]);
 
 type ParsedTicket = {
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
             "importance: one of p0, p1, p2, or empty. P0 is most critical, P1 is important, P2 is normal/lower priority.",
             "Treat explicit P0/P1/P2 as the only priority vocabulary; do not infer urgent/high/low labels.",
             "subtasks: array of short action strings. Split comma/newline/arrow lists.",
-            "agent: codex, claude, hermes, openclaw, or null.",
+            "agent: codex, claude, hermes, openclaw, ideas, or null.",
             "Only choose an agent if the text explicitly mentions one or selectedAgent is provided.",
             "Treat Open Floor as OpenClaw.",
           ].join("\n"),
