@@ -37,6 +37,61 @@ function dueAtOrNull(value: string) {
   return value && !Number.isNaN(new Date(value).getTime()) ? value : null;
 }
 
+function normalizeDateLabel(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function startOfIstDay(date = new Date()) {
+  const ist = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  ist.setHours(0, 0, 0, 0);
+  return ist;
+}
+
+function weekdayDueAt(label: string) {
+  const normalized = normalizeDateLabel(label);
+  const weekdays = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  const target = weekdays.findIndex((day) => normalized.startsWith(day));
+  if (target === -1) return null;
+
+  const now = startOfIstDay();
+  const currentName = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "long" }).format(now).toLowerCase();
+  const currentDay = weekdays.indexOf(currentName);
+  if (currentDay === -1) return null;
+
+  const daysAhead = (target - currentDay + 7) % 7;
+  now.setDate(now.getDate() + daysAhead);
+  now.setHours(18, 0, 0, 0);
+  return now.toISOString();
+}
+
+function inferredDueAt(body: Record<string, unknown>, sourceText: string) {
+  const candidates = [
+    typeof body.due_at === "string" ? body.due_at : "",
+    typeof body.due_label === "string" ? body.due_label : "",
+    sourceText,
+  ];
+
+  for (const candidate of candidates) {
+    const direct = dueAtOrNull(candidate);
+    if (direct) return direct;
+  }
+
+  for (const candidate of candidates) {
+    const weekday = weekdayDueAt(candidate);
+    if (weekday) return weekday;
+  }
+
+  return null;
+}
+
 function fallbackTitle(sourceText: string) {
   const title = sourceText
     .replace(/@(codex|claude|hermes|open\s*claw|openclaw|open\s*floor)/ig, "")
@@ -74,8 +129,8 @@ export async function POST(req: Request) {
     const title = typeof body.title === "string" && body.title.trim()
       ? body.title.trim()
       : fallbackTitle(sourceText);
-    const dueAt = dueAtOrNull(typeof body.due_at === "string" ? body.due_at : "");
     const dueLabel = typeof body.due_label === "string" ? body.due_label.trim() : "";
+    const dueAt = inferredDueAt(body, sourceText);
     const importance = typeof body.importance === "string" && IMPORTANCE.has(body.importance as TicketImportance)
       ? body.importance as TicketImportance
       : null;
