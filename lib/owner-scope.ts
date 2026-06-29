@@ -1,4 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { isAuthBypassEnabled } from "@/lib/auth-bypass";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -20,7 +21,7 @@ export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && error.name === "UnauthorizedError";
 }
 
-export async function getUserScopedDb(): Promise<DbScope> {
+async function getAuthenticatedUserScopedDb(): Promise<DbScope> {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -32,6 +33,14 @@ export async function getUserScopedDb(): Promise<DbScope> {
   }
 
   return { supabase: supabase as unknown as SupabaseClient, ownerUserId: user.id };
+}
+
+export async function getUserScopedDb(): Promise<DbScope> {
+  if (isAuthBypassEnabled()) {
+    return getDefaultOwnerDb();
+  }
+
+  return getAuthenticatedUserScopedDb();
 }
 
 export async function getDefaultOwnerId(): Promise<string> {
