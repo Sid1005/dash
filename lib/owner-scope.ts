@@ -1,4 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { isAuthBypassEnabled } from "@/lib/auth-bypass";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -8,7 +9,6 @@ export type DbScope = {
 };
 
 const DEFAULT_OWNER_EMAIL = "siddharth.ceri@gmail.com";
-const AUTH_BYPASS_ENABLED = process.env.DASH_AUTH_BYPASS !== "false";
 let cachedDefaultOwnerId: string | null = null;
 
 function unauthorized(): Error {
@@ -36,7 +36,7 @@ async function getAuthenticatedUserScopedDb(): Promise<DbScope> {
 }
 
 export async function getUserScopedDb(): Promise<DbScope> {
-  if (AUTH_BYPASS_ENABLED) {
+  if (isAuthBypassEnabled()) {
     return getDefaultOwnerDb();
   }
 

@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-
-const AUTH_BYPASS_ENABLED = process.env.DASH_AUTH_BYPASS !== "false";
+import { isAuthBypassEnabled } from "@/lib/auth-bypass";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
@@ -10,7 +9,7 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  if (AUTH_BYPASS_ENABLED) {
+  if (isAuthBypassEnabled()) {
     return response;
   }
 
