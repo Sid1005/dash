@@ -1621,8 +1621,8 @@ function TicketCard({
         }}
       >
         <div className="saved-ticket-header-copy" style={{ alignItems: "flex-start", textAlign: "left" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
-            <h3 style={{ margin: 0, fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, width: "100%", maxWidth: "100%" }}>
+            <h3 style={{ margin: 0, maxWidth: "100%", fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
               {displayTicketTitle(ticket.title)}
             </h3>
             <div style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".11em", color: "#5f5b52", display: "flex", alignItems: "center", gap: 6, textAlign: "left" }}>
