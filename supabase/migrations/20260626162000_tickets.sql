@@ -8,7 +8,7 @@ create table if not exists public.tickets (
   horizon text not null check (horizon in ('today', 'next_3_days', 'this_week', 'this_month')),
   importance text not null check (importance in ('low', 'medium', 'high', 'urgent')),
   subtasks jsonb not null default '[]'::jsonb check (jsonb_typeof(subtasks) = 'array'),
-  agent text check (agent in ('codex', 'claude', 'hermes', 'openclaw')),
+  agent text check (agent in ('codex', 'claude', 'hermes', 'openclaw', 'ideas')),
   source_text text not null default '',
   status text not null default 'backlog' check (status in ('backlog', 'now', 'done', 'archived')),
   sort_order integer not null default 0,

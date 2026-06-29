@@ -963,7 +963,7 @@ export function DayTimeline({
   );
 }
 
-type CockpitAgent = "codex" | "claude" | "hermes" | "openclaw";
+type CockpitAgent = "codex" | "claude" | "hermes" | "openclaw" | "ideas";
 type CockpitImportance = "p0" | "p1" | "p2";
 
 type CockpitTicketDraft = {
@@ -980,21 +980,21 @@ const AGENT_LABELS: Record<CockpitAgent, string> = {
   claude: "Claude",
   hermes: "Hermes",
   openclaw: "OpenClaw",
+  ideas: "Ideas",
 };
 
 const COCKPIT_BLUE = "#6EC7EA";
-
-const AGENT_COLORS: Record<CockpitAgent, string> = {
-  codex: COCKPIT_BLUE,
-  claude: COCKPIT_BLUE,
-  hermes: COCKPIT_BLUE,
-  openclaw: COCKPIT_BLUE,
-};
 
 const IMPORTANCE_LABELS: Record<CockpitImportance, string> = {
   p0: "P0",
   p1: "P1",
   p2: "P2",
+};
+
+const IMPORTANCE_TONES: Record<CockpitImportance, { line: string; soft: string; mid: string; dark: string }> = {
+  p0: { line: "#f2c94c", soft: "#fffdf0", mid: "#f8df7e", dark: "#e8bf26" },
+  p1: { line: "#f2c94c", soft: "#fffdf0", mid: "#f8df7e", dark: "#e8bf26" },
+  p2: { line: "#f2c94c", soft: "#fff9dc", mid: "#f2c94c", dark: "#d7ab19" },
 };
 
 const LEGACY_IMPORTANCE_LABELS: Record<string, string> = {
@@ -1023,6 +1023,43 @@ function ticketImportanceText(ticket: TicketRow) {
   return (IMPORTANCE_LABELS as Record<string, string>)[ticket.importance]
     ?? LEGACY_IMPORTANCE_LABELS[ticket.importance]
     ?? ticket.importance.toUpperCase();
+}
+
+function ticketHeaderMetaNodes(ticket: TicketRow) {
+  return [ticketDueText(ticket), ticketImportanceText(ticket)]
+    .filter((item) => item !== "No due date" && item !== "No priority")
+    .map((item, index) => (
+      <span key={`${item}-${index}`} style={{ display: "inline-flex", alignItems: "center" }}>
+        {index > 0 && <span style={{ color: "#8a877d", margin: "0 4px" }}>·</span>}
+        {item === "P0" || item === "P1" ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#c43131",
+                boxShadow: "0 0 0 2px rgba(196, 49, 49, 0.12)",
+                flex: "none",
+              }}
+            />
+            <span
+              style={{
+                color: "#a51f1f",
+                background: "#ffe1e1",
+                padding: "1px 5px",
+                borderRadius: 3,
+                border: "1px solid rgba(165, 31, 31, 0.18)",
+              }}
+            >
+              {item}
+            </span>
+          </span>
+        ) : (
+          <span>{item}</span>
+        )}
+      </span>
+    ));
 }
 
 function ticketSubtaskDetails(ticket: TicketRow): TicketSubtaskDetails {
@@ -1220,7 +1257,7 @@ function AgentQuickTags({
         className={`agent-quick-tag mono ${selectedAgent === null ? "active" : ""}`}
         style={{ background: selectedAgent === null ? COCKPIT_BLUE : "#ffffff" }}
       >
-        No agent
+        Human
       </button>
       {(Object.keys(AGENT_LABELS) as CockpitAgent[])
         .filter((agent) => agent !== "openclaw")
@@ -1503,7 +1540,6 @@ function NowSubtaskCard({
 function TicketCard({
   ticket,
   placement = "saved",
-  index = 0,
   onMove,
   onEdit,
   onAddSubtask,
@@ -1514,7 +1550,6 @@ function TicketCard({
 }: {
   ticket: TicketRow;
   placement?: "saved" | "now";
-  index?: number;
   onMove: (id: string, status: "backlog" | "now") => void;
   onEdit: (id: string, title: string) => Promise<void>;
   onAddSubtask: (id: string, subtask: string) => Promise<void>;
@@ -1528,8 +1563,14 @@ function TicketCard({
   const [newSubtask, setNewSubtask] = useState("");
   const [busy, setBusy] = useState(false);
   const visibleSubtasks = ticket.subtasks.filter((subtask) => subtaskStatus(ticket, subtask) === "backlog");
-
-  const accent = index % 2 === 0 ? COCKPIT_BLUE : "#F3E15E";
+  const normalizedImportance = (() => {
+    const value = (ticket.importance ?? "").toLowerCase();
+    if (value === "p0" || value === "p1" || value === "p2") return value as CockpitImportance;
+    const legacy = LEGACY_IMPORTANCE_LABELS[value];
+    if (legacy === "P0" || legacy === "P1" || legacy === "P2") return legacy.toLowerCase() as CockpitImportance;
+    return "p2" as CockpitImportance;
+  })();
+  const importanceTone = IMPORTANCE_TONES[normalizedImportance] ?? IMPORTANCE_TONES.p2;
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1559,6 +1600,11 @@ function TicketCard({
       className={`saved-ticket-card ${placement === "now" ? "now-ticket-card" : ""}`.trim()}
       draggable={placement === "saved"}
       onDragStart={(event) => event.dataTransfer.setData("text/plain", ticket.id)}
+      style={{
+        background: "#ffffff",
+        borderColor: "#16130F",
+        boxShadow: "3px 3px 0 rgba(20,17,12,.13)",
+      }}
     >
       <div
         className="ticket-title-strip"
@@ -1567,20 +1613,22 @@ function TicketCard({
           cursor: "pointer",
           position: "relative",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          paddingRight: 44,
-          background: accent
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 14,
+          padding: "18px 18px 14px 20px",
+          background: "transparent"
         }}
       >
-        <div className="saved-ticket-header-copy">
-          <span style={{ fontFamily: "var(--sans)", fontWeight: 800, fontSize: 16, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, textAlign: "center" }}>
-            {displayTicketTitle(ticket.title)}
-          </span>
-          <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#16130F", flexShrink: 0, textAlign: "center" }}>
-            {[ticketDueText(ticket), ticketImportanceText(ticket)].filter((item) => item !== "No due date" && item !== "No priority").join(" · ").toUpperCase()}
-          </span>
+        <div className="saved-ticket-header-copy" style={{ alignItems: "flex-start", textAlign: "left" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, width: "100%" }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+              {displayTicketTitle(ticket.title)}
+            </h3>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".11em", color: "#5f5b52", display: "flex", alignItems: "center", gap: 6, textAlign: "left" }}>
+              {ticketHeaderMetaNodes(ticket)}
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -1588,13 +1636,13 @@ function TicketCard({
           onClick={() => void onDelete(ticket.id)}
           title="Delete ticket"
           aria-label={`Delete ticket ${ticket.title}`}
-          style={{ position: "absolute", right: 0, top: 0, bottom: 0, margin: "auto 0" }}
+          style={{ position: "static", flexShrink: 0, marginTop: 2 }}
         >
           ✕
         </button>
       </div>
       {editing ? (
-        <div className="saved-ticket-edit" style={{ padding: "14px 16px", display: "grid", gap: 8 }}>
+        <div className="saved-ticket-edit" style={{ padding: "0 18px 16px 20px", display: "grid", gap: 8 }}>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -1618,9 +1666,9 @@ function TicketCard({
           </div>
         </div>
       ) : null}
-      <div className="saved-ticket-subtasks" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="saved-ticket-subtasks" style={{ padding: "0 18px 16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
         {visibleSubtasks.length === 0 ? (
-          <div style={{ padding: 14, textAlign: "center", fontFamily: "var(--mono)", fontSize: 12, letterSpacing: ".1em", color: "#9a978d", border: "1.5px dashed #cfccc2" }}>
+          <div style={{ padding: "22px 14px", textAlign: "center", fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".18em", color: "#b6b1a7", borderTop: "1px solid rgba(22,19,15,0.08)", borderBottom: "1px solid rgba(22,19,15,0.08)" }}>
             ALL IN FOCUS ✓
           </div>
         ) : (
@@ -1649,9 +1697,9 @@ function TicketCard({
             placeholder="+ ADD SUBTASK"
             style={{
               width: "100%",
-              border: "1.5px dashed #b4b1a7",
-              background: "transparent",
-              padding: "8px 10px",
+              border: "1.5px dashed rgba(22,19,15,0.18)",
+              background: "rgba(255,255,255,0.55)",
+              padding: "10px 12px",
               fontFamily: "var(--mono)",
               fontSize: 12,
               letterSpacing: ".1em",
@@ -1683,7 +1731,7 @@ function TicketCard({
               Add
             </button>
           </div>
-          <div className="saved-ticket-footer">
+          <div className="saved-ticket-footer" style={{ padding: "0 18px 18px 20px" }}>
             <MiniPill tone="#ffffff">{ticket.status}</MiniPill>
             <div className="saved-ticket-actions">
               <button
@@ -2021,7 +2069,7 @@ export function CockpitPage() {
           </CockpitCard>
 
           <div className="cockpit-ticket-stack">
-            <CockpitCard eyebrow="↳ CREATE TICKET 03" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card" headerMeta="BRAIN-DUMP · WE PARSE IT">
+            <CockpitCard eyebrow="↳ CREATE TICKET 03" tone={COCKPIT_BLUE} className="cockpit-ticket-card cockpit-primary-card" headerMeta="">
               <div className="ticket-compose-stack">
                 <AgentQuickTags selectedAgent={draft.agent} onSelect={selectAgent} />
 
@@ -2040,7 +2088,7 @@ export function CockpitPage() {
                 <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 8 }}>
                   <button
                     type="button"
-                    className="cockpit-action-button mono"
+                    className="cockpit-action-button secondary mono"
                     disabled={!canSave || !draft.agent || saveState === "saving"}
                     onClick={() => void persistTicket(true)}
                   >
@@ -2071,11 +2119,10 @@ export function CockpitPage() {
                 <div className="saved-ticket-empty">No saved tickets yet.</div>
               ) : (
                 <div className="saved-ticket-grid">
-                  {backlogTickets.map((ticket, idx) => (
+                  {backlogTickets.map((ticket) => (
                     <TicketCard
                       key={ticket.id}
                       ticket={ticket}
-                      index={idx}
                       onMove={moveTicket}
                       onEdit={editTicket}
                       onAddSubtask={addTicketSubtask}
