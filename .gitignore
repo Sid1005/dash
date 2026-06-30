@@ -50,6 +50,7 @@ next-env.d.ts
 /.telegram-pending.json
 /supabase/.temp/
 *.sqlite3
+/agent-artifacts/
 
 # documentation and explanation files
 /*.html

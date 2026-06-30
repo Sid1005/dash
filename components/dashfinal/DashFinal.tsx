@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { format, parseISO } from "date-fns";
 import { Pencil, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Check, Plus, Trash2, GripVertical, Lightbulb, Archive } from "lucide-react";
 import { formatINR } from "@/lib/currency";
+import { agentRunArtifactUrls } from "@/lib/agent-runs";
 import type { TicketRow, TicketSubtaskDetails } from "@/lib/tickets-types";
 import type {
   CockpitPostcard,
@@ -1574,6 +1575,17 @@ function TicketCard({
     return "p2" as CockpitImportance;
   })();
   const importanceTone = IMPORTANCE_TONES[normalizedImportance] ?? IMPORTANCE_TONES.p2;
+  const latestRun = ticket.latest_agent_run;
+  const artifactUrls = latestRun?.status === "succeeded" ? agentRunArtifactUrls(latestRun.id) : null;
+  const agentStatusLabel = latestRun
+    ? latestRun.status === "succeeded"
+      ? "Agent done"
+      : latestRun.status === "failed"
+        ? "Agent failed"
+        : latestRun.status === "running"
+          ? "Agent running"
+          : "Agent queued"
+    : null;
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1752,6 +1764,22 @@ function TicketCard({
           </div>
         </>
       )}
+      {artifactUrls ? (
+        <div style={{ padding: "0 18px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <Link href={artifactUrls.md} className="ticket-move-button mono" target="_blank" rel="noreferrer">
+            Open MD
+          </Link>
+          <Link href={artifactUrls.html} className="ticket-move-button mono" target="_blank" rel="noreferrer">
+            Open HTML
+          </Link>
+        </div>
+      ) : agentStatusLabel ? (
+        <div style={{ padding: "0 18px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <span className="ticket-move-button mono" style={{ cursor: "default", opacity: latestRun?.status === "failed" ? 1 : 0.72 }}>
+            {agentStatusLabel}
+          </span>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -1798,6 +1826,19 @@ export function CockpitPage() {
   useEffect(() => {
     void loadTickets();
   }, [loadTickets, refreshTrigger]);
+
+  useEffect(() => {
+    const hasActiveAgentRun = tickets.some((ticket) => {
+      const status = ticket.latest_agent_run?.status;
+      return status === "queued" || status === "running";
+    });
+    if (!hasActiveAgentRun) return;
+
+    const interval = window.setInterval(() => {
+      void loadTickets();
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [loadTickets, tickets]);
 
   useEffect(() => {
     const handleDragOver = (event: DragEvent) => {

@@ -8,6 +8,7 @@
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "agent:run": "node scripts/agent-runner.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "node tests/integration/crud.js"
