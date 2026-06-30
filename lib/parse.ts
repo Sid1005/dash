@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { getGroqClient, GROQ_MODEL } from "@/lib/groq";
 import { SPEND_CATEGORIES } from "@/lib/spending";
+import { normalizeStandaloneCalendarInput } from "./calendar-input";
 
 let openCodeClient: OpenAI | undefined;
 
@@ -513,6 +514,7 @@ export async function parseInput(
   const isVision = !!base64Image;
   const client = isVision ? getOpenCodeClient() : getGroqClient();
   const modelName = isVision ? "kimi-k2.6" : GROQ_MODEL;
+  const normalizedInput = normalizeStandaloneCalendarInput(input);
 
   try {
     let response;
@@ -541,7 +543,7 @@ If the user's input is a completely new command, ignore the pending action and p
         content: [
           {
             type: "text",
-            text: `Current time: ${now}\n\nInput: ${input || "Analyze the attached image."}`
+            text: `Current time: ${now}\n\nInput: ${normalizedInput || "Analyze the attached image."}`
           },
           {
             type: "image_url",
@@ -552,7 +554,7 @@ If the user's input is a completely new command, ignore the pending action and p
         ]
       });
     } else {
-      messages.push({ role: "user", content: `Current time: ${now}\n\nInput: ${input}` });
+      messages.push({ role: "user", content: `Current time: ${now}\n\nInput: ${normalizedInput}` });
     }
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
