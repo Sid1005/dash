@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { format, parseISO } from "date-fns";
 import { Pencil, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, Check, Plus, Trash2, GripVertical, Lightbulb, Archive } from "lucide-react";
 import { formatINR } from "@/lib/currency";
+import { agentRunArtifactUrls } from "@/lib/agent-runs";
 import type { TicketRow, TicketSubtaskDetails } from "@/lib/tickets-types";
 import type {
   CockpitPostcard,
@@ -1574,6 +1575,8 @@ function TicketCard({
     return "p2" as CockpitImportance;
   })();
   const importanceTone = IMPORTANCE_TONES[normalizedImportance] ?? IMPORTANCE_TONES.p2;
+  const latestRun = ticket.latest_agent_run;
+  const artifactUrls = latestRun?.status === "succeeded" ? agentRunArtifactUrls(latestRun.id) : null;
 
   const saveTitle = async () => {
     if (!title.trim()) return;
@@ -1752,6 +1755,16 @@ function TicketCard({
           </div>
         </>
       )}
+      {artifactUrls ? (
+        <div style={{ padding: "0 18px 18px 20px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <Link href={artifactUrls.md} className="ticket-move-button mono" target="_blank" rel="noreferrer">
+            Open MD
+          </Link>
+          <Link href={artifactUrls.html} className="ticket-move-button mono" target="_blank" rel="noreferrer">
+            Open HTML
+          </Link>
+        </div>
+      ) : null}
     </article>
   );
 }

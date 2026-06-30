@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GROQ_MODEL, getGroqClient } from "@/lib/groq";
 import { getUserScopedDb, isUnauthorizedError } from "@/lib/owner-scope";
+import { createAgentRun, listLatestAgentRunsByTicket } from "@/lib/agent-runs";
 import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 import type { TicketAgent, TicketImportance, TicketRow, TicketStatus, TicketSubtaskDetails } from "@/lib/tickets-types";
 
@@ -128,11 +129,6 @@ function normalizeAgent(value: unknown) {
   return AGENTS.has(agent as TicketAgent) ? agent as TicketAgent : null;
 }
 
-function normalizeImportance(value: unknown) {
-  const importance = cleanString(value).toLowerCase();
-  return IMPORTANCE.has(importance as TicketImportance) ? importance as TicketImportance : null;
-}
-
 function normalizeGroqDraft(value: unknown): GroqTicketDraft {
   const object = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
@@ -216,7 +212,14 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ tickets: data as TicketRow[] });
+    const tickets = (data ?? []) as TicketRow[];
+    const latestRuns = await listLatestAgentRunsByTicket(scope, tickets.map((ticket) => ticket.id));
+    return NextResponse.json({
+      tickets: tickets.map((ticket) => ({
+        ...ticket,
+        latest_agent_run: latestRuns.get(ticket.id) ?? null,
+      })),
+    });
   } catch (error) {
     const status = isUnauthorizedError(error) ? 401 : 500;
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -282,7 +285,6 @@ export async function POST(req: Request) {
         source_text: sourceText,
         status: "backlog",
         sort_order: 0,
-        mission_status: agent ? "queued" : "none",
       })
       .select("*")
       .single();
@@ -307,7 +309,34 @@ export async function POST(req: Request) {
       });
       return NextResponse.json({ error: ticketError.message }, { status: 500 });
     }
-    return NextResponse.json({ ticket: ticket as TicketRow }, { status: 201 });
+
+    const createdTicket = ticket as TicketRow;
+    if (createdTicket.agent) {
+      try {
+        const run = await createAgentRun(scope, createdTicket);
+        return NextResponse.json({
+          ticket: {
+            ...createdTicket,
+            latest_agent_run: {
+              id: run.id,
+              agent: run.agent,
+              status: run.status,
+              artifact_dir: run.artifact_dir,
+              md_path: run.md_path,
+              html_path: run.html_path,
+              created_at: run.created_at,
+              completed_at: run.completed_at,
+            },
+          },
+        }, { status: 201 });
+      } catch (agentRunError) {
+        return NextResponse.json({
+          error: agentRunError instanceof Error ? agentRunError.message : "Could not queue agent run",
+        }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ ticket: createdTicket }, { status: 201 });
   } catch (error) {
     const status = isUnauthorizedError(error) ? 401 : 500;
     const message = error instanceof Error ? error.message : "Unknown error";
