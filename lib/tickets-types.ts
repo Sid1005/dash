@@ -17,6 +17,8 @@ export type TicketAgentRunRow = {
   artifact_dir: string;
   md_path: string | null;
   html_path: string | null;
+  md_content: string | null;
+  html_content: string | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;

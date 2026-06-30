@@ -15,8 +15,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const kind = parseKind(req.nextUrl.searchParams.get("kind"));
     const scope = await getUserScopedDb();
     const run = await loadAgentRun(scope, id);
-    const filePath = agentRunArtifactPath(run.artifact_dir, kind);
-    const body = await readFile(filePath, "utf8");
+    const storedBody = kind === "html" ? run.html_content : run.md_content;
+    const body = storedBody ?? await readFile(agentRunArtifactPath(run.artifact_dir, kind), "utf8");
     const filename = kind === "html" ? "idea.html" : "idea.md";
     const contentType = kind === "html"
       ? "text/html; charset=utf-8"

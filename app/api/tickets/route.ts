@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { GROQ_MODEL, getGroqClient } from "@/lib/groq";
 import { getUserScopedDb, isUnauthorizedError } from "@/lib/owner-scope";
 import { createAgentRun, listLatestAgentRunsByTicket } from "@/lib/agent-runs";
+import { triggerAgentRunnerOnce } from "@/lib/agent-runner-trigger";
 import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 import type { TicketAgent, TicketImportance, TicketRow, TicketStatus, TicketSubtaskDetails } from "@/lib/tickets-types";
 
@@ -314,6 +315,7 @@ export async function POST(req: Request) {
     if (createdTicket.agent) {
       try {
         const run = await createAgentRun(scope, createdTicket);
+        after(() => triggerAgentRunnerOnce());
         return NextResponse.json({
           ticket: {
             ...createdTicket,

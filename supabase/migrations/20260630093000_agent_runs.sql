@@ -9,6 +9,8 @@ create table if not exists public.agent_runs (
   artifact_dir text not null default '',
   md_path text,
   html_path text,
+  md_content text,
+  html_content text,
   error_message text,
   started_at timestamptz,
   completed_at timestamptz,

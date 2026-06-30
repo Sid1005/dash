@@ -152,12 +152,19 @@ async function writeAgentResult(client, run, ticket, result) {
     return;
   }
 
+  const [mdContent, htmlContent] = await Promise.all([
+    readFile(mdPath, "utf8"),
+    readFile(htmlPath, "utf8"),
+  ]);
+
   await client.from("agent_runs")
     .update({
       status: "succeeded",
       completed_at: new Date().toISOString(),
       md_path: path.posix.join(run.artifact_dir, ARTIFACT_FILES.md),
       html_path: path.posix.join(run.artifact_dir, ARTIFACT_FILES.html),
+      md_content: mdContent,
+      html_content: htmlContent,
       error_message: null,
     })
     .eq("id", run.id);
@@ -178,7 +185,7 @@ async function processOneRun(client) {
   const command = isClaude ? "claude" : "codex";
   const args = isClaude
     ? ["--permission-mode", "bypassPermissions", "--print", "--model", "claude-sonnet-4-6", run.generated_prompt]
-    : ["--model", CODEX_MODEL, "exec", "--sandbox", "workspace-write", "--ask-for-approval", "never", run.generated_prompt];
+    : ["exec", "--model", CODEX_MODEL, "--sandbox", "workspace-write", run.generated_prompt];
 
   const result = await startProcess(command, args, artifactDir, Number(process.env.AGENT_RUNNER_TIMEOUT_MS ?? DEFAULT_AGENT_TIMEOUT_MS));
   await writeAgentResult(client, run, ticket, result);

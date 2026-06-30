@@ -19,6 +19,8 @@ describe("agent run helpers", () => {
     expect(prompt).toContain("idea.html");
     expect(prompt).toContain("personal website");
     expect(prompt).toContain("homepage, about section, projects, writing, and contact area");
+    expect(prompt).toContain("Do not include sections like 'Setup Needed'");
+    expect(prompt).toContain("If the user asks for a website saying a phrase, the HTML should primarily show that phrase");
   });
 
   it("creates stable artifact links for the two served files", () => {
