@@ -101,8 +101,8 @@ function startProcess(command, args, cwd, timeoutMs = DEFAULT_AGENT_TIMEOUT_MS) 
 async function claimNextRun(client) {
   const { data, error } = await client.rpc("claim_next_agent_run");
   if (error) throw new Error(error.message);
-  if (!data) return null;
-  return data;
+  if (Array.isArray(data)) return data[0] ?? null;
+  return data ?? null;
 }
 
 async function getTicket(client, ticketId, ownerUserId) {

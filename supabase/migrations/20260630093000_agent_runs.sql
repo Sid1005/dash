@@ -51,31 +51,23 @@ create trigger agent_runs_set_updated_at
   execute function public.set_agent_runs_updated_at();
 
 create or replace function public.claim_next_agent_run()
-returns public.agent_runs
+returns setof public.agent_runs
 language plpgsql
 as $$
-declare
-  claimed_run public.agent_runs;
 begin
-  select *
-    into claimed_run
-  from public.agent_runs
-  where status = 'queued'
-  order by created_at asc
-  for update skip locked
-  limit 1;
-
-  if not found then
-    return null;
-  end if;
-
-  update public.agent_runs
-    set status = 'running',
-        started_at = now()
-  where id = claimed_run.id
-    and status = 'queued'
-  returning * into claimed_run;
-
-  return claimed_run;
+  return query
+    update public.agent_runs
+      set status = 'running',
+          started_at = now()
+    where id = (
+      select id
+      from public.agent_runs
+      where status = 'queued'
+      order by created_at asc
+      for update skip locked
+      limit 1
+    )
+      and status = 'queued'
+    returning public.agent_runs.*;
 end;
 $$;
