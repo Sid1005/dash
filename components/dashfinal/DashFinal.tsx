@@ -1421,11 +1421,8 @@ function SubtaskMiniCard({
         <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
         <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
       </div>
-      <span
-        title={subtask}
-        style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-      >
-        {subtask}
+      <span className="subtask-title-copy" title={subtask} data-full-title={subtask}>
+        <span>{subtask}</span>
       </span>
       <button
         type="button"
