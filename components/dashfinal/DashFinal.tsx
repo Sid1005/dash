@@ -1484,13 +1484,13 @@ function NowSubtaskCard({
   return (
     <div className="now-subtask-card" style={{ display: "flex", alignItems: "stretch", background: "#ffffff", border: "1.5px solid #16130F", boxShadow: "3px 3px 0 rgba(20,17,12,.13)" }}>
       <div style={{ width: 6, alignSelf: "stretch", flex: "none", background: "#F3E15E" }}></div>
-      <div style={{ flex: 1, padding: "12px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ flex: 1, minWidth: 0, padding: "12px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 11, letterSpacing: ".1em", background: "#16130F", color: "#ffffff", padding: "3px 5px" }}>
               SUBTASK
             </span>
-            <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#8a877d", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ minWidth: 0, flex: "1 1 auto", fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".08em", color: "#8a877d", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {displayTicketTitle(ticket.title)}
             </span>
           </div>
