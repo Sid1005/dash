@@ -17,6 +17,7 @@ import { clearPending, getPending, setPending } from "@/lib/telegram-pending";
 import { currentIstDate, currentIstTime, currentIstWeekday } from "@/lib/time";
 import { getDefaultOwnerDb } from "@/lib/owner-scope";
 import { answerPersonalQuestion, classifyTelegramIntent } from "@/lib/intelligence";
+import { hasStandaloneCalendarEventHint, normalizeStandaloneCalendarInput } from "@/lib/calendar-input";
 import { type ParsedAction } from "@/lib/parse";
 
 /** Extend invocation until `after()` tasks finish (LLM + Telegram API). */
@@ -106,15 +107,17 @@ async function processMessage(
   try {
     const pending = await getPending(chatId);
     const pendingAction = pending && pending.action.type !== "chat" ? pending.action : undefined;
+    const normalizedText = normalizeStandaloneCalendarInput(text);
+    const standaloneEventHint = hasStandaloneCalendarEventHint(normalizedText);
 
     if (!base64Image) {
-      if (isConfirmNo(text)) {
+      if (isConfirmNo(normalizedText)) {
         await clearPending(chatId);
         await sendTelegramMessage(chatId, "Okay, not saved.");
         return;
       }
 
-      if (isConfirmYes(text)) {
+      if (isConfirmYes(normalizedText)) {
         if (!pending || pending.action.type === "chat") {
           await sendTelegramMessage(chatId, "No pending item to save. Send a food line or /food command.");
           return;
@@ -125,8 +128,8 @@ async function processMessage(
         return;
       }
 
-      if (isDirectSlashCommand(text)) {
-        const action = await parseNaturalLanguage(text, `${today} ${now} (${weekday})`);
+      if (isDirectSlashCommand(normalizedText)) {
+        const action = await parseNaturalLanguage(normalizedText, `${today} ${now} (${weekday})`);
         const message = await applyParsedAction(action, today, await getDefaultOwnerDb());
         await clearPending(chatId);
         await sendTelegramMessage(chatId, `✓ ${message}`);
@@ -134,11 +137,11 @@ async function processMessage(
       }
 
       const history = chatHistoryFromPending(pending);
-      const contextualInput = inputWithHistory(text, history);
+      const contextualInput = standaloneEventHint ? normalizedText : inputWithHistory(normalizedText, history);
       const intent = await classifyTelegramIntent(contextualInput, `${today} ${now} (${weekday})`);
       if (intent.intent === "question") {
         const answer = await answerPersonalQuestion(
-          text,
+          normalizedText,
           `${today} ${now} (${weekday})`,
           today,
           await getDefaultOwnerDb(),
@@ -158,12 +161,12 @@ async function processMessage(
     }
 
     let history = chatHistoryFromPending(pending);
-    if (text) {
-      history.push(`User: ${text}`);
+    if (normalizedText) {
+      history.push(`User: ${normalizedText}`);
       history = trimChatHistory(history);
     }
 
-    const parseInputString = pendingAction ? text : history.join("\n");
+    const parseInputString = pendingAction || standaloneEventHint ? normalizedText : history.join("\n");
     let action = await parseNaturalLanguage(
       parseInputString,
       `${today} ${now} (${weekday})`,
