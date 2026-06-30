@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isAuthBypassEnabled } from "../lib/auth-bypass";
 
 describe("isAuthBypassEnabled", () => {
-  it("keeps bypass enabled without env configuration", () => {
+  it("uses the committed auth bypass flag", () => {
     delete process.env.DASH_AUTH_BYPASS;
     expect(isAuthBypassEnabled()).toBe(true);
   });
