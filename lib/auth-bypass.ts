@@ -1,3 +1,5 @@
+import { AUTH_BYPASS_ENABLED } from "./flags";
+
 export function isAuthBypassEnabled() {
-  return true;
+  return AUTH_BYPASS_ENABLED;
 }
