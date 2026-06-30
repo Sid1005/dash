@@ -28,18 +28,6 @@ const TL_START = 4 * 60 + 30;  // 4:30 AM
 const TL_END   = 22 * 60 + 30; // 10:30 PM
 const TL_SPAN  = TL_END - TL_START;
 
-// Category accent colors — vibrant left-border + translucent fill pairs
-const CAT_ACCENT: Record<string, { border: string; bg: string; text: string }> = {
-  "Deep Work": { border: "#6366f1", bg: "rgba(99,102,241,0.10)",  text: "#818cf8" },
-  Meetings:    { border: "#14b8a6", bg: "rgba(20,184,166,0.10)",  text: "#5eead4" },
-  Admin:       { border: "#94a3b8", bg: "rgba(148,163,184,0.08)", text: "#cbd5e1" },
-  Learning:    { border: "#a78bfa", bg: "rgba(167,139,250,0.10)", text: "#c4b5fd" },
-  Health:      { border: "#34d399", bg: "rgba(52,211,153,0.10)",  text: "#6ee7b7" },
-  Body:        { border: "#34d399", bg: "rgba(52,211,153,0.10)",  text: "#6ee7b7" },
-  Personal:    { border: "#fbbf24", bg: "rgba(251,191,36,0.10)",  text: "#fcd34d" },
-  Other:       { border: "#78716c", bg: "rgba(120,113,108,0.08)", text: "#a8a29e" },
-};
-const CAT_ACCENT_DEFAULT = CAT_ACCENT.Other;
 const CAL_ACCENT = { border: "#3b82f6", bg: "rgba(59,130,246,0.10)", text: "#93c5fd" };
 
 export const BROWN_LINE = "rgba(205,187,159,0.62)";
@@ -891,7 +879,7 @@ export function DayTimeline({
         const top = minuteToPx(toMinutes(b.start));
         const h = Math.max(minuteToPx(toMinutes(b.end)) - top, SLOT_HEIGHT - 2);
         const isCal = b.kind === "cal";
-        const accent = isCal ? CAL_ACCENT : (CAT_ACCENT[b.cat || "Other"] ?? CAT_ACCENT_DEFAULT);
+        const accent = CAL_ACCENT;
         const compact = h <= SLOT_HEIGHT + 2;
         const blockKey = b.id ?? `${b.kind}-${b.start}-${b.end}-${b.label}`;
         const isSelected = selectedBlockId === blockKey;
@@ -1433,7 +1421,10 @@ function SubtaskMiniCard({
         <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
         <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
       </div>
-      <span style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span
+        title={subtask}
+        style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      >
         {subtask}
       </span>
       <button
@@ -1632,12 +1623,18 @@ function TicketCard({
           justifyContent: "space-between",
           gap: 14,
           padding: "18px 18px 14px 20px",
-          background: "transparent"
+          background: "transparent",
+          minWidth: 0,
+          width: "100%",
+          boxSizing: "border-box"
         }}
       >
-        <div className="saved-ticket-header-copy" style={{ alignItems: "flex-start", textAlign: "left" }}>
+        <div className="saved-ticket-header-copy" title={displayTicketTitle(ticket.title)} style={{ alignItems: "flex-start", textAlign: "left", minWidth: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, width: "100%", maxWidth: "100%" }}>
-            <h3 style={{ margin: 0, maxWidth: "100%", fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+            <h3
+              title={displayTicketTitle(ticket.title)}
+              style={{ margin: 0, maxWidth: "100%", fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}
+            >
               {displayTicketTitle(ticket.title)}
             </h3>
             <div style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".11em", color: "#5f5b52", display: "flex", alignItems: "center", gap: 6, textAlign: "left" }}>
