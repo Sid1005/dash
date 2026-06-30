@@ -1485,7 +1485,7 @@ function NowSubtaskCard({
   const details = detailsMap[subtask]?.details;
 
   return (
-    <div style={{ display: "flex", alignItems: "stretch", background: "#ffffff", border: "1.5px solid #16130F", boxShadow: "3px 3px 0 rgba(20,17,12,.13)" }}>
+    <div className="now-subtask-card" style={{ display: "flex", alignItems: "stretch", background: "#ffffff", border: "1.5px solid #16130F", boxShadow: "3px 3px 0 rgba(20,17,12,.13)" }}>
       <div style={{ width: 6, alignSelf: "stretch", flex: "none", background: "#F3E15E" }}></div>
       <div style={{ flex: 1, padding: "12px 13px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -1629,7 +1629,12 @@ function TicketCard({
           boxSizing: "border-box"
         }}
       >
-        <div className="saved-ticket-header-copy" title={displayTicketTitle(ticket.title)} style={{ alignItems: "flex-start", textAlign: "left", minWidth: 0 }}>
+        <div
+          className="saved-ticket-header-copy"
+          title={displayTicketTitle(ticket.title)}
+          data-full-title={displayTicketTitle(ticket.title)}
+          style={{ alignItems: "flex-start", textAlign: "left", minWidth: 0 }}
+        >
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, width: "100%", maxWidth: "100%" }}>
             <h3
               title={displayTicketTitle(ticket.title)}

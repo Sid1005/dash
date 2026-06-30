@@ -405,6 +405,10 @@ a {
   overflow: hidden;
 }
 
+.cockpit-now-card {
+  max-height: 430px;
+}
+
 .cockpit-ticket-card {
   min-height: 300px;
 }
@@ -591,9 +595,12 @@ a {
 }
 
 .now-scroll-list {
-  overflow: visible;
-  max-height: none;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100%;
   align-content: start;
+  padding-bottom: 2px;
 }
 
 .ticket-compose-stack {
@@ -663,6 +670,29 @@ a {
   gap: 4px;
   align-items: center;
   text-align: center;
+  position: relative;
+}
+
+.saved-ticket-header-copy:hover::after,
+.saved-ticket-header-copy:focus-within::after {
+  content: attr(data-full-title);
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: calc(100% + 6px);
+  max-width: min(420px, calc(100vw - 48px));
+  border: 1.5px solid #16130F;
+  background: #ffffff;
+  box-shadow: 3px 3px 0 rgba(20, 17, 12, 0.2);
+  color: #16130F;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 7px 9px;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
 }
 
 .saved-ticket-close {
@@ -789,6 +819,11 @@ a {
 
 .subtask-mini-card.compact {
   cursor: default;
+}
+
+.now-subtask-card {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .subtask-mini-row {
