@@ -1421,7 +1421,10 @@ function SubtaskMiniCard({
         <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
         <span style={{ width: "2.5px", height: "2.5px", borderRadius: "50%", background: "#16130F", display: "block" }}></span>
       </div>
-      <span style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span
+        title={subtask}
+        style={{ fontFamily: "var(--sans)", fontWeight: 600, fontSize: "15px", color: "#16130F", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      >
         {subtask}
       </span>
       <button
@@ -1620,12 +1623,18 @@ function TicketCard({
           justifyContent: "space-between",
           gap: 14,
           padding: "18px 18px 14px 20px",
-          background: "transparent"
+          background: "transparent",
+          minWidth: 0,
+          width: "100%",
+          boxSizing: "border-box"
         }}
       >
-        <div className="saved-ticket-header-copy" style={{ alignItems: "flex-start", textAlign: "left" }}>
+        <div className="saved-ticket-header-copy" title={displayTicketTitle(ticket.title)} style={{ alignItems: "flex-start", textAlign: "left", minWidth: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, width: "100%", maxWidth: "100%" }}>
-            <h3 style={{ margin: 0, maxWidth: "100%", fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+            <h3
+              title={displayTicketTitle(ticket.title)}
+              style={{ margin: 0, maxWidth: "100%", fontFamily: "var(--sans)", fontWeight: 800, fontSize: 22, lineHeight: 1.08, color: "#16130F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}
+            >
               {displayTicketTitle(ticket.title)}
             </h3>
             <div style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: ".11em", color: "#5f5b52", display: "flex", alignItems: "center", gap: 6, textAlign: "left" }}>
