@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import {
   applyParsedAction,
-  formatActionPreview,
   parseNaturalLanguage,
   prepareParsedAction,
 } from "@/lib/actions";
@@ -9,7 +8,6 @@ import {
   answerCallbackQuery,
   getAllowedUserIds,
   sendTelegramMessage,
-  sendTelegramMessageWithButtons,
   getTelegramFilePath,
   downloadTelegramFile,
 } from "@/lib/telegram";
@@ -192,8 +190,9 @@ async function processMessage(
 
     const targetDate = (action.data?.date as string) || today;
     action = await prepareParsedAction(action, targetDate, await getDefaultOwnerDb());
-    await setPending(chatId, action, targetDate);
-    await sendTelegramMessageWithButtons(chatId, formatActionPreview(action));
+    const message = await applyParsedAction(action, targetDate, await getDefaultOwnerDb());
+    await clearPending(chatId);
+    await sendTelegramMessage(chatId, `✓ ${message}`);
   } catch (e) {
     await sendTelegramMessage(chatId, `Error: ${String(e)}`);
   }
