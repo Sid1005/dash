@@ -1,6 +1,15 @@
 # Dash
 
-Dash is my personal life OS for the stuff that disappears if I do not pin it somewhere.
+Dash is my personal operating system. It makes my life more manageable.
+I track my tasks, events, spending, food and workouts through Telegram or the Iphone Shortcut.
+The goal was least friction and to use interfaces I already do.
+
+Everything I log becomes memory. I query data I've logged.
+
+I have tickets to capture my now. I note down ideas and can tag agents to give my ideas a starting point.
+The corporate world influence meant I needed to give P0, P1, P2 priority to tickets.
+
+An end to end productivity system.
 
 ## Built with
 
