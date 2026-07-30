@@ -1,0 +1,12 @@
+# Local design experiments are preserved in the working tree but are not part
+# of the focused production product.
+/app/concepts
+/components/LayoutLab.tsx
+/components/LayoutLab.module.css
+
+# Development-only material.
+/explainer
+/tests
+/docs
+/scripts
+/supabase
