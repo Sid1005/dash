@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cleanSpendingCategory, findSpendingCategory } from "@/lib/spending-categories";
-import { normalizeWorkoutCategory } from "@/lib/workout-normalization";
+import { cleanSpendingCategory, findSpendingCategory } from "../lib/spending-categories";
+import { normalizeWorkoutCategory } from "../lib/workout-normalization";
 
 describe("domain value normalization", () => {
   it("accepts canonical workout categories without semantic guessing", () => {

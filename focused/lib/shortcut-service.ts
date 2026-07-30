@@ -1,15 +1,15 @@
 import "server-only";
 import { after } from "next/server";
-import { formatSpendingAnswer, formatTaskAnswer, formatWorkoutAnswer } from "@/lib/answers";
-import { notifyHermesTaskUpsert } from "@/lib/hermes-reminders";
-import { formatINR } from "@/lib/money";
-import { planShortcutInput } from "@/lib/opencode";
-import { insertSpending, listSpending } from "@/lib/spending-data";
-import { ensureSpendingCategory, listSpendingCategories } from "@/lib/spending-category-data";
-import { insertTask, listTasks } from "@/lib/tasks-data";
-import { currentIstDate, currentIstIso, currentIstTime, endOfIstDayIso } from "@/lib/time";
-import type { ShortcutPlan, ShortcutQueryDomain, ShortcutResponse } from "@/lib/types";
-import { appendWorkoutLog, listWorkoutSessions, titleWorkoutSession } from "@/lib/workouts-data";
+import { formatSpendingAnswer, formatTaskAnswer, formatWorkoutAnswer } from "./answers";
+import { notifyHermesTaskUpsert } from "./hermes-reminders";
+import { formatINR } from "./money";
+import { planShortcutInput } from "./opencode";
+import { insertSpending, listSpending } from "./spending-data";
+import { ensureSpendingCategory, listSpendingCategories } from "./spending-category-data";
+import { insertTask, listTasks } from "./tasks-data";
+import { currentIstDate, currentIstIso, currentIstTime, endOfIstDayIso } from "./time";
+import type { ShortcutPlan, ShortcutQueryDomain, ShortcutResponse } from "./types";
+import { appendWorkoutLog, listWorkoutSessions, titleWorkoutSession } from "./workouts-data";
 
 function startOfMonth(date: string): string {
   return `${date.slice(0, 7)}-01`;

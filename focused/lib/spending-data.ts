@@ -1,6 +1,6 @@
 import "server-only";
-import { getOwnerScope } from "@/lib/owner-scope";
-import type { SpendingCategory, SpendingRow } from "@/lib/types";
+import { getOwnerScope } from "./owner-scope";
+import type { SpendingCategory, SpendingRow } from "./types";
 
 export async function listSpending(options: {
   startDate?: string;

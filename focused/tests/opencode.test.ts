@@ -11,7 +11,7 @@ vi.mock("openai", () => ({
   },
 }));
 
-import { OPENCODE_MODEL, planShortcutInput } from "@/lib/opencode";
+import { OPENCODE_MODEL, planShortcutInput } from "../lib/opencode";
 
 describe("OpenCode shortcut routing", () => {
   beforeEach(() => {

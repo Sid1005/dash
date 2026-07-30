@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { executeShortcutPlan, handleQueryInput, handleShortcutInput, handleWorkoutTitle } from "@/lib/shortcut-service";
-import { currentIstDate, currentIstIso, currentIstTime, isIsoDate, isLocalTime } from "@/lib/time";
-import { normalizeWorkoutCategory } from "@/lib/workout-normalization";
-import { planShortcutInput } from "@/lib/opencode";
-import { listSpendingCategories } from "@/lib/spending-category-data";
-import type { ShortcutQueryDomain, WorkoutExerciseInput } from "@/lib/types";
+import { executeShortcutPlan, handleQueryInput, handleShortcutInput, handleWorkoutTitle } from "../../../lib/shortcut-service";
+import { currentIstDate, currentIstIso, currentIstTime, isIsoDate, isLocalTime } from "../../../lib/time";
+import { normalizeWorkoutCategory } from "../../../lib/workout-normalization";
+import { planShortcutInput } from "../../../lib/opencode";
+import { listSpendingCategories } from "../../../lib/spending-category-data";
+import type { ShortcutQueryDomain, WorkoutExerciseInput } from "../../../lib/types";
 
 export const maxDuration = 60;
 

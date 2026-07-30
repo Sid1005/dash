@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { appendWorkoutLog, listWorkoutSessions } from "@/lib/workouts-data";
-import { currentIstIso } from "@/lib/time";
-import { normalizeWorkoutCategory } from "@/lib/workout-normalization";
+import { appendWorkoutLog, listWorkoutSessions } from "../../../lib/workouts-data";
+import { currentIstIso } from "../../../lib/time";
+import { normalizeWorkoutCategory } from "../../../lib/workout-normalization";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

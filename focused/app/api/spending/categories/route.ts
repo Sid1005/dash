@@ -4,7 +4,7 @@ import {
   listSpendingCategories,
   mergeSpendingCategories,
   renameSpendingCategory,
-} from "@/lib/spending-category-data";
+} from "../../../../lib/spending-category-data";
 
 export async function GET() {
   try {

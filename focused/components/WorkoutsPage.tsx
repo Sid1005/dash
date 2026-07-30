@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppShell } from "@/components/AppShell";
-import { DateCalendar } from "@/components/DateCalendar";
-import { QueryBox } from "@/components/QueryBox";
-import { formatDateLong } from "@/lib/time";
-import { WORKOUT_CATEGORIES, type WorkoutCategory, type WorkoutSession, type WorkoutSet } from "@/lib/types";
+import { AppShell } from "./AppShell";
+import { DateCalendar } from "./DateCalendar";
+import { QueryBox } from "./QueryBox";
+import { formatDateLong } from "../lib/time";
+import { WORKOUT_CATEGORIES, type WorkoutCategory, type WorkoutSession, type WorkoutSet } from "../lib/types";
 
 type DraftSet = { key: string; id?: string; reps: string; weight: string; notes: string };
 type DraftExercise = { key: string; name: string; sets: DraftSet[] };

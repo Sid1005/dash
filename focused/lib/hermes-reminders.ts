@@ -1,4 +1,4 @@
-import type { TaskRow } from "@/lib/types";
+import type { TaskRow } from "./types";
 
 type ReminderEvent =
   | {

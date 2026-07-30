@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { deleteWorkoutSession, titleWorkoutSession, updateWorkoutSession } from "@/lib/workouts-data";
-import { normalizeWorkoutCategory } from "@/lib/workout-normalization";
+import { deleteWorkoutSession, titleWorkoutSession, updateWorkoutSession } from "../../../../lib/workouts-data";
+import { normalizeWorkoutCategory } from "../../../../lib/workout-normalization";
 
 type Context = { params: Promise<{ id: string }> };
 

@@ -1,4 +1,4 @@
-import { WORKOUT_CATEGORIES, type WorkoutCategory, type WorkoutExerciseInput } from "@/lib/types";
+import { WORKOUT_CATEGORIES, type WorkoutCategory, type WorkoutExerciseInput } from "./types";
 
 export type NormalizedWorkoutSet = {
   id?: string;

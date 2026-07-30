@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { deleteSpending, insertSpending, listSpending, updateSpending } from "@/lib/spending-data";
-import { ensureSpendingCategory } from "@/lib/spending-category-data";
-import { cleanSpendingCategory } from "@/lib/spending-categories";
-import { currentIstDate, currentIstTime } from "@/lib/time";
+import { deleteSpending, insertSpending, listSpending, updateSpending } from "../../../lib/spending-data";
+import { ensureSpendingCategory } from "../../../lib/spending-category-data";
+import { cleanSpendingCategory } from "../../../lib/spending-categories";
+import { currentIstDate, currentIstTime } from "../../../lib/time";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

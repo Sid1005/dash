@@ -1,7 +1,7 @@
 import "server-only";
-import { getOwnerScope } from "@/lib/owner-scope";
-import { endOfIstDayIso, startOfIstDayIso } from "@/lib/time";
-import type { TaskRow } from "@/lib/types";
+import { getOwnerScope } from "./owner-scope";
+import { endOfIstDayIso, startOfIstDayIso } from "./time";
+import type { TaskRow } from "./types";
 
 export async function listTasks(options: {
   startDate?: string;

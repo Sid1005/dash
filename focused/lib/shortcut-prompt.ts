@@ -1,4 +1,4 @@
-import { SPENDING_CATEGORIES, type ShortcutQueryDomain } from "@/lib/types";
+import { SPENDING_CATEGORIES, type ShortcutQueryDomain } from "./types";
 
 export function buildShortcutSystemPrompt(now: string, options: {
   spendingCategories?: string[];

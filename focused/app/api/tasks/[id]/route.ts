@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
-import { notifyHermesTaskCancel, notifyHermesTaskUpsert } from "@/lib/hermes-reminders";
-import { deleteTask, updateTask } from "@/lib/tasks-data";
+import { notifyHermesTaskCancel, notifyHermesTaskUpsert } from "../../../../lib/hermes-reminders";
+import { deleteTask, updateTask } from "../../../../lib/tasks-data";
 
 type Context = { params: Promise<{ id: string }> };
 

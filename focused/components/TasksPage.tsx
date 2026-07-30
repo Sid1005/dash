@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppShell } from "@/components/AppShell";
-import { DateCalendar } from "@/components/DateCalendar";
-import { QueryBox } from "@/components/QueryBox";
-import { currentIstDate, formatDateLong } from "@/lib/time";
-import type { TaskRow } from "@/lib/types";
+import { AppShell } from "./AppShell";
+import { DateCalendar } from "./DateCalendar";
+import { QueryBox } from "./QueryBox";
+import { currentIstDate, formatDateLong } from "../lib/time";
+import type { TaskRow } from "../lib/types";
 
 function today() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });

@@ -1,7 +1,7 @@
 import "server-only";
-import { getOwnerScope } from "@/lib/owner-scope";
-import { cleanSpendingCategory, findSpendingCategory } from "@/lib/spending-categories";
-import type { SpendingCategoryRow } from "@/lib/types";
+import { getOwnerScope } from "./owner-scope";
+import { cleanSpendingCategory, findSpendingCategory } from "./spending-categories";
+import type { SpendingCategoryRow } from "./types";
 
 const CATEGORY_SELECT = "id,name,created_at";
 

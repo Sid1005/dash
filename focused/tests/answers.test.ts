@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { formatTaskAnswer } from "@/lib/answers";
-import type { TaskRow } from "@/lib/types";
+import { formatTaskAnswer } from "../lib/answers";
+import type { TaskRow } from "../lib/types";
 
 const task: TaskRow = {
   id: "task-1",

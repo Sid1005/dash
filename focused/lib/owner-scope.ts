@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getAdminClient } from "./supabase/admin";
 
 export type DbScope = { supabase: SupabaseClient; ownerUserId: string };
 

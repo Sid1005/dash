@@ -1,11 +1,11 @@
 import "server-only";
-import { getOwnerScope } from "@/lib/owner-scope";
-import { istDateFromIso } from "@/lib/time";
-import type { WorkoutCategory, WorkoutExerciseInput, WorkoutSession, WorkoutSet } from "@/lib/types";
+import { getOwnerScope } from "./owner-scope";
+import { istDateFromIso } from "./time";
+import type { WorkoutCategory, WorkoutExerciseInput, WorkoutSession, WorkoutSet } from "./types";
 import {
   exerciseKey,
   normalizeWorkoutExercises,
-} from "@/lib/workout-normalization";
+} from "./workout-normalization";
 
 const SESSION_SELECT = `
   id,title,title_confirmed,session_category,occurred_date,

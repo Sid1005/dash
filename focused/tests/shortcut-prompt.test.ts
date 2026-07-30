@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildShortcutSystemPrompt } from "@/lib/shortcut-prompt";
+import { buildShortcutSystemPrompt } from "../lib/shortcut-prompt";
 
 describe("DeepSeek shortcut system prompt", () => {
   it("routes terse workout questions through the model with session semantics", () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { notifyHermesTaskCancel, notifyHermesTaskUpsert } from "@/lib/hermes-reminders";
+import { notifyHermesTaskCancel, notifyHermesTaskUpsert } from "../lib/hermes-reminders";
 
 describe("Hermes reminder delivery", () => {
   beforeEach(() => {

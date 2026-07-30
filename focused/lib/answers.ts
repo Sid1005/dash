@@ -1,7 +1,7 @@
-import { formatINR } from "@/lib/money";
-import { formatDateLong, formatDateRange } from "@/lib/time";
-import type { SpendingRow, TaskRow, WorkoutSession } from "@/lib/types";
-import { groupWorkoutExercises } from "@/lib/workouts-data";
+import { formatINR } from "./money";
+import { formatDateLong, formatDateRange } from "./time";
+import type { SpendingRow, TaskRow, WorkoutSession } from "./types";
+import { groupWorkoutExercises } from "./workouts-data";
 
 function setLabel(reps: number, weight: number): string {
   if (reps > 0 && weight > 0) return `${reps} × ${weight} kg`;

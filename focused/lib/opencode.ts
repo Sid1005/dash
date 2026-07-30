@@ -1,10 +1,10 @@
 import "server-only";
 import OpenAI from "openai";
-import { currentIstIso, isIsoDate, isLocalTime } from "@/lib/time";
-import { type ShortcutPlan, type ShortcutIntent, type ShortcutQueryDomain } from "@/lib/types";
-import { cleanSpendingCategory, findSpendingCategory } from "@/lib/spending-categories";
-import { normalizeWorkoutCategory } from "@/lib/workout-normalization";
-import { buildShortcutSystemPrompt } from "@/lib/shortcut-prompt";
+import { currentIstIso, isIsoDate, isLocalTime } from "./time";
+import { type ShortcutPlan, type ShortcutIntent, type ShortcutQueryDomain } from "./types";
+import { cleanSpendingCategory, findSpendingCategory } from "./spending-categories";
+import { normalizeWorkoutCategory } from "./workout-normalization";
+import { buildShortcutSystemPrompt } from "./shortcut-prompt";
 
 export const OPENCODE_MODEL = "deepseek-v4-flash";
 export const OPENCODE_BASE_URL = "https://opencode.ai/zen/go/v1";

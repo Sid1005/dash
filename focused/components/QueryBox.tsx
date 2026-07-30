@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ShortcutQueryDomain, ShortcutResponse } from "@/lib/types";
+import type { ShortcutQueryDomain, ShortcutResponse } from "../lib/types";
 
 export function QueryBox({ domain, placeholder, examples }: {
   domain: ShortcutQueryDomain;
